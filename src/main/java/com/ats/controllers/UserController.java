@@ -3,8 +3,11 @@ package com.ats.controllers;
 import com.ats.domain.User;
 import com.ats.dto.UserDtos.ChangeValue;
 import com.ats.dto.UserDtos.CreateUser;
+import com.ats.config.AuthInterceptor;
 import com.ats.dto.UserDtos.Login;
+import com.ats.dto.UserDtos.LoginResponse;
 import com.ats.dto.UserDtos.UserResponse;
+import com.ats.service.AuthService;
 import com.ats.service.NotFoundException;
 import com.ats.service.UserService;
 import jakarta.validation.Valid;
@@ -20,9 +23,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class UserController {
 
 	private final UserService users;
+	private final AuthService auth;
 
-	public UserController(UserService users) {
+	public UserController(UserService users, AuthService auth) {
 		this.users = users;
+		this.auth = auth;
 	}
 
 	@PostMapping
@@ -32,8 +37,15 @@ public class UserController {
 	}
 
 	@PostMapping("/login")
-	public UserResponse login(@Valid @RequestBody Login req) {
-		return UserResponse.from(users.login(req));
+	public LoginResponse login(@Valid @RequestBody Login req) {
+		User user = users.login(req);
+		return new LoginResponse(auth.createSession(user.getId()), UserResponse.from(user));
+	}
+
+	@PostMapping("/{id}/logout")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void logout(@RequestAttribute(AuthInterceptor.TOKEN_ATTRIBUTE) String token) {
+		auth.invalidateSession(token);
 	}
 
 	@GetMapping("/{id}")

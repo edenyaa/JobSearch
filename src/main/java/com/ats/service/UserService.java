@@ -15,10 +15,12 @@ public class UserService {
 
 	private final UserRepository users;
 	private final UserHandler handler;
+	private final AuthService auth;
 
-	public UserService(UserRepository users, UserHandler handler) {
+	public UserService(UserRepository users, UserHandler handler, AuthService auth) {
 		this.users = users;
 		this.handler = handler;
+		this.auth = auth;
 	}
 
 	public User register(CreateUser req) {
@@ -55,11 +57,13 @@ public class UserService {
 	public User changePassword(Long id, String oldPassword, String newPassword) {
 		User u = get(id);
 		handler.editPassword(u, oldPassword, newPassword);
+		auth.invalidateAllSessions(id); // a password change logs out every session
 		return u;
 	}
 
 	public void delete(Long id) {
 		users.delete(get(id));
+		auth.invalidateAllSessions(id);
 	}
 
 	public User setMainCv(Long id, MultipartFile file) throws IOException {
