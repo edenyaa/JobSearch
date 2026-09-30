@@ -15,6 +15,9 @@ public final class UserDtos {
 	public record Login(@NotBlank String email, @NotBlank String password) {
 	}
 
+	public record LoginResponse(String token, UserResponse user) {
+	}
+
 	public record ChangeValue(@NotBlank String oldValue, @NotBlank String newValue) {
 	}
 
