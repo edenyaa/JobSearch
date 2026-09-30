@@ -1,6 +1,7 @@
 package com.ats.service;
 
 import com.ats.domain.Job;
+import com.ats.domain.JobStatus;
 import com.ats.dto.JobDtos.JobRequest;
 import com.ats.repository.JobRepository;
 import java.io.IOException;
@@ -38,8 +39,17 @@ public class JobService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<Job> list(Long userId) {
-		return jobs.findByUserIdOrderByAppliedDateDesc(userId);
+	public List<Job> list(Long userId, JobStatus status) {
+		if (status == null) {
+			return jobs.findByUserIdOrderByAppliedDateDesc(userId);
+		}
+		return jobs.findByUserIdAndStatusOrderByAppliedDateDesc(userId, status);
+	}
+
+	public Job changeStatus(Long userId, Long id, JobStatus status) {
+		Job j = get(userId, id);
+		j.setStatus(status);
+		return j;
 	}
 
 	@Transactional(readOnly = true)
@@ -76,6 +86,12 @@ public class JobService {
 		j.setCompany(req.company());
 		j.setDescription(req.description());
 		j.setLink(req.link());
+		if (req.status() != null) {
+			j.setStatus(req.status());
+		}
+		if (req.notes() != null) {
+			j.setNotes(req.notes());
+		}
 		j.setAppliedDate(req.appliedDate() != null ? req.appliedDate()
 				: j.getAppliedDate() != null ? j.getAppliedDate() : LocalDate.now());
 	}

@@ -36,6 +36,13 @@ public class Job {
 
 	private LocalDate appliedDate;
 
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private JobStatus status = JobStatus.APPLIED;
+
+	@Column(length = 4000)
+	private String notes;
+
 	/** The resume tailored to this job (derived from the user's main CV). */
 	private String tailoredResumeFileName;
 	private String tailoredResumeContentType;

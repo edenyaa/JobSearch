@@ -1,9 +1,13 @@
 package com.ats.controllers;
 
 import com.ats.domain.Job;
+import com.ats.domain.JobStatus;
+import com.ats.dto.JobDtos.ChangeStatus;
 import com.ats.dto.JobDtos.JobRequest;
 import com.ats.dto.JobDtos.JobResponse;
+import com.ats.dto.AnalysisDtos.MatchResponse;
 import com.ats.service.JobService;
+import com.ats.service.MatchService;
 import com.ats.service.NotFoundException;
 import jakarta.validation.Valid;
 import java.io.IOException;
@@ -19,9 +23,16 @@ import org.springframework.web.multipart.MultipartFile;
 public class JobController {
 
 	private final JobService jobs;
+	private final MatchService matches;
 
-	public JobController(JobService jobs) {
+	public JobController(JobService jobs, MatchService matches) {
 		this.jobs = jobs;
+		this.matches = matches;
+	}
+
+	@GetMapping("/{id}/match")
+	public MatchResponse match(@PathVariable Long userId, @PathVariable Long id) {
+		return MatchResponse.from(matches.analyze(userId, id));
 	}
 
 	@PostMapping
@@ -31,8 +42,14 @@ public class JobController {
 	}
 
 	@GetMapping
-	public List<JobResponse> list(@PathVariable Long userId) {
-		return jobs.list(userId).stream().map(JobResponse::from).toList();
+	public List<JobResponse> list(@PathVariable Long userId, @RequestParam(required = false) JobStatus status) {
+		return jobs.list(userId, status).stream().map(JobResponse::from).toList();
+	}
+
+	@PutMapping("/{id}/status")
+	public JobResponse changeStatus(@PathVariable Long userId, @PathVariable Long id,
+			@Valid @RequestBody ChangeStatus req) {
+		return JobResponse.from(jobs.changeStatus(userId, id, req.status()));
 	}
 
 	@GetMapping("/{id}")

@@ -16,11 +16,22 @@ public class UserService {
 	private final UserRepository users;
 	private final UserHandler handler;
 	private final AuthService auth;
+	private final CvTextExtractor extractor;
 
-	public UserService(UserRepository users, UserHandler handler, AuthService auth) {
+	public UserService(UserRepository users, UserHandler handler, AuthService auth, CvTextExtractor extractor) {
 		this.users = users;
 		this.handler = handler;
 		this.auth = auth;
+		this.extractor = extractor;
+	}
+
+	@Transactional(readOnly = true)
+	public String mainCvText(Long id) {
+		User u = get(id);
+		if (u.getMainCv() == null) {
+			throw new ValidationException("Upload a main CV first.");
+		}
+		return extractor.extract(u.getMainCv(), u.getMainCvFileName());
 	}
 
 	public User register(CreateUser req) {

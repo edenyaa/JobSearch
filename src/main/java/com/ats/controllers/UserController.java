@@ -1,6 +1,7 @@
 package com.ats.controllers;
 
 import com.ats.domain.User;
+import com.ats.dto.AnalysisDtos.CvTextResponse;
 import com.ats.dto.UserDtos.ChangeValue;
 import com.ats.dto.UserDtos.CreateUser;
 import com.ats.config.AuthInterceptor;
@@ -77,6 +78,11 @@ public class UserController {
 	@PutMapping(value = "/{id}/cv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	public UserResponse uploadCv(@PathVariable Long id, @RequestParam("file") MultipartFile file) throws IOException {
 		return UserResponse.from(users.setMainCv(id, file));
+	}
+
+	@GetMapping("/{id}/cv/text")
+	public CvTextResponse cvText(@PathVariable Long id) {
+		return new CvTextResponse(users.mainCvText(id));
 	}
 
 	@GetMapping("/{id}/cv")
