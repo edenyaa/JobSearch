@@ -16,4 +16,4 @@ export default defineConfig({
     css: false,
     env: { VITE_API_URL: '' },
   },
-})
+}) 
