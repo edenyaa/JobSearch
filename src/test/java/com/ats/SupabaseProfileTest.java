@@ -31,7 +31,10 @@ class SupabaseProfileTest {
 
     @Test
     public void GivenDefaultConfiguration_WhenReading_ThenNoDatabaseUrlIsSetSoTestsStayOnTheInMemoryDatabase() throws Exception {
-        Properties properties = load("application.properties");
+        Properties properties = new Properties();
+        try (java.io.InputStream in = java.nio.file.Files.newInputStream(java.nio.file.Path.of("src/main/resources/application.properties"))) {
+            properties.load(in);
+        }
 
         assertNull(properties.getProperty("spring.datasource.url"));
     }
