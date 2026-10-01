@@ -1,3 +1,5 @@
+import { apiUrl } from './config'
+
 export class ApiError extends Error {
   readonly status: number
 
@@ -86,7 +88,7 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   }
   let response: Response
   try {
-    response = await fetch(`/api${path}`, { ...init, headers })
+    response = await fetch(apiUrl(path), { ...init, headers })
   } catch {
     throw new ApiError(0, `${action}: the server did not respond. Make sure the backend is running (./mvnw spring-boot:run) and try again.`)
   }
