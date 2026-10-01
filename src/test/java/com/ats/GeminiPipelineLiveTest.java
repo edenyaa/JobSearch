@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.ats.domain.TailoredResumePayload;
 import com.ats.service.GeminiClient;
+import com.ats.service.LlmException;
+import org.junit.jupiter.api.Assumptions;
 import com.ats.service.TailoringPipeline;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -47,7 +49,16 @@ class GeminiPipelineLiveTest {
 
     @Test
     public void GivenRealApiKey_WhenRunningThePipeline_ThenResumeIsGroundedAndNamesAreNormalized() {
-        TailoredResumePayload payload = pipeline().run("Backend Engineer", "Acme", JOB, RESUME, List.of(), List.of());
+        TailoredResumePayload payload = null;
+        try {
+            payload = pipeline().run("Backend Engineer", "Acme", JOB, RESUME, List.of(), List.of());
+        } catch (LlmException e) {
+            String message = e.getMessage() == null ? "" : e.getMessage();
+            boolean temporary = message.contains("rate limit") || message.contains("HTTP 503")
+                    || message.contains("HTTP 500") || message.contains("HTTP 504") || message.contains("Could not reach");
+            Assumptions.assumeFalse(temporary, "Gemini is busy or rate limited: " + message);
+            throw e;
+        }
 
         assertFalse(payload.resume().experience().isEmpty());
         assertFalse(payload.resume().projects().isEmpty());

@@ -41,4 +41,27 @@ class SupabaseProfileTest {
         assertNotNull(Class.forName("org.postgresql.Driver"));
     }
 
+    @Test
+    public void GivenSupabaseProfile_WhenReading_ThenPoolStaysWellBelowThePoolerLimitOf15() throws Exception {
+        Properties properties = load("application-supabase.properties");
+
+        assertTrue(Integer.parseInt(properties.getProperty("spring.datasource.hikari.maximum-pool-size")) <= 10);
+    }
+
+    @Test
+    public void GivenSupabaseProfile_WhenReading_ThenNoLiteralPasswordIsStored() throws Exception {
+        Properties properties = load("application-supabase.properties");
+
+        assertTrue(properties.getProperty("spring.datasource.password").startsWith("${"));
+        assertNull(properties.getProperty("spring.datasource.url.h2"));
+        assertFalse(properties.getProperty("spring.datasource.url").contains("h2"));
+    }
+
+    @Test
+    public void GivenGitIgnore_WhenReading_ThenTheLocalSecretsFileIsIgnored() throws Exception {
+        java.util.List<String> lines = java.nio.file.Files.readAllLines(java.nio.file.Path.of(".gitignore"));
+
+        assertTrue(lines.stream().anyMatch(line -> line.trim().equals(".env")));
+    }
+
 }
