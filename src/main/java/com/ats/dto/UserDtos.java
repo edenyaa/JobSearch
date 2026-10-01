@@ -15,6 +15,15 @@ public final class UserDtos {
 	public record Login(@NotBlank String email, @NotBlank String password) {
 	}
 
+	public record CvUploadResponse(Long id, String name, String email, String mainCvFileName, boolean hasMainCv,
+			int importedSkills) {
+
+		public static CvUploadResponse from(User u, int importedSkills) {
+			return new CvUploadResponse(u.getId(), u.getName(), u.getEmail(), u.getMainCvFileName(), u.getMainCv() != null,
+					importedSkills);
+		}
+	}
+
 	public record LoginResponse(String token, UserResponse user) {
 	}
 

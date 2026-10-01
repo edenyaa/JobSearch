@@ -26,8 +26,12 @@ public class Skill {
 	@Column(length = 2000)
 	private String explanation;
 
-	/** Buzzwords / keywords to use in the resume so ATS systems match it. */
+	// Buzzwords / keywords to use in the resume so ATS systems match it
 	@ElementCollection
 	private List<String> keywords = new ArrayList<>();
+
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false)
+	private SkillSource source = SkillSource.MANUAL;
 
 }

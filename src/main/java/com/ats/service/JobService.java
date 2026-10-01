@@ -72,10 +72,14 @@ public class JobService {
 	}
 
 	public Job setTailoredResume(Long userId, Long id, MultipartFile file) throws IOException {
+		return storeTailoredResume(userId, id, file.getOriginalFilename(), file.getContentType(), file.getBytes());
+	}
+
+	public Job storeTailoredResume(Long userId, Long id, String fileName, String contentType, byte[] data) {
 		Job j = get(userId, id);
-		j.setTailoredResumeFileName(file.getOriginalFilename());
-		j.setTailoredResumeContentType(file.getContentType());
-		j.setTailoredResume(file.getBytes());
+		j.setTailoredResumeFileName(fileName);
+		j.setTailoredResumeContentType(contentType);
+		j.setTailoredResume(data);
 		return j;
 	}
 

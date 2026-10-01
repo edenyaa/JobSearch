@@ -5,7 +5,11 @@ import com.ats.domain.JobStatus;
 import com.ats.dto.JobDtos.ChangeStatus;
 import com.ats.dto.JobDtos.JobRequest;
 import com.ats.dto.JobDtos.JobResponse;
+import com.ats.dto.AnalysisDtos.AnalysisResponse;
 import com.ats.dto.AnalysisDtos.MatchResponse;
+import com.ats.service.AnalysisService;
+import com.ats.dto.AnalysisDtos.TailorResponse;
+import com.ats.service.TailoringService;
 import com.ats.service.JobService;
 import com.ats.service.MatchService;
 import com.ats.service.NotFoundException;
@@ -24,10 +28,24 @@ public class JobController {
 
 	private final JobService jobs;
 	private final MatchService matches;
+	private final TailoringService tailoring;
+	private final AnalysisService analysis;
 
-	public JobController(JobService jobs, MatchService matches) {
+	public JobController(JobService jobs, MatchService matches, TailoringService tailoring, AnalysisService analysis) {
 		this.jobs = jobs;
 		this.matches = matches;
+		this.tailoring = tailoring;
+		this.analysis = analysis;
+	}
+
+	@GetMapping("/{id}/analysis")
+	public AnalysisResponse analysis(@PathVariable Long userId, @PathVariable Long id) {
+		return AnalysisResponse.from(analysis.analyze(userId, id));
+	}
+
+	@PostMapping("/{id}/tailor")
+	public TailorResponse tailor(@PathVariable Long userId, @PathVariable Long id) {
+		return TailorResponse.from(tailoring.tailor(userId, id));
 	}
 
 	@GetMapping("/{id}/match")

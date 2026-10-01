@@ -2,6 +2,7 @@ package com.ats.service;
 
 import com.ats.domain.Course;
 import com.ats.domain.Skill;
+import com.ats.domain.SkillSource;
 import com.ats.dto.SkillDtos.SkillRequest;
 import com.ats.repository.CourseRepository;
 import com.ats.repository.SkillRepository;
@@ -28,6 +29,15 @@ public class SkillService {
 		Skill s = new Skill();
 		s.setUser(users.get(userId));
 		apply(s, req);
+		return skills.save(s);
+	}
+
+	public Skill createFromCv(Long userId, String name, List<String> keywords) {
+		Skill s = new Skill();
+		s.setUser(users.get(userId));
+		s.setName(name);
+		s.setKeywords(new ArrayList<>(keywords));
+		s.setSource(SkillSource.CV);
 		return skills.save(s);
 	}
 

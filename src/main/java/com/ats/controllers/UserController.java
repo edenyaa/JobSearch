@@ -2,6 +2,10 @@ package com.ats.controllers;
 
 import com.ats.domain.User;
 import com.ats.dto.AnalysisDtos.CvTextResponse;
+import com.ats.dto.AnalysisDtos.DetectedSkillResponse;
+import com.ats.dto.UserDtos.CvUploadResponse;
+import com.ats.service.CvSkillService;
+import java.util.List;
 import com.ats.dto.UserDtos.ChangeValue;
 import com.ats.dto.UserDtos.CreateUser;
 import com.ats.config.AuthInterceptor;
@@ -25,10 +29,12 @@ public class UserController {
 
 	private final UserService users;
 	private final AuthService auth;
+	private final CvSkillService cvSkills;
 
-	public UserController(UserService users, AuthService auth) {
+	public UserController(UserService users, AuthService auth, CvSkillService cvSkills) {
 		this.users = users;
 		this.auth = auth;
+		this.cvSkills = cvSkills;
 	}
 
 	@PostMapping
@@ -76,8 +82,14 @@ public class UserController {
 	}
 
 	@PutMapping(value = "/{id}/cv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-	public UserResponse uploadCv(@PathVariable Long id, @RequestParam("file") MultipartFile file) throws IOException {
-		return UserResponse.from(users.setMainCv(id, file));
+	public CvUploadResponse uploadCv(@PathVariable Long id, @RequestParam("file") MultipartFile file) throws IOException {
+		User updated = users.setMainCv(id, file);
+		return CvUploadResponse.from(updated, cvSkills.importFromCv(id));
+	}
+
+	@GetMapping("/{id}/cv/skills")
+	public List<DetectedSkillResponse> cvSkills(@PathVariable Long id) {
+		return cvSkills.detect(id).stream().map(DetectedSkillResponse::from).toList();
 	}
 
 	@GetMapping("/{id}/cv/text")

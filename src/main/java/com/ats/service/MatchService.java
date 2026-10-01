@@ -4,7 +4,6 @@ import com.ats.domain.Job;
 import com.ats.domain.KeywordMatcher;
 import com.ats.domain.MatchResult;
 import java.util.List;
-import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,9 +25,7 @@ public class MatchService {
 	public MatchResult analyze(Long userId, Long jobId) {
 		Job job = jobs.get(userId, jobId);
 		String cvText = users.mainCvText(userId);
-		List<String> terms = skills.list(userId).stream()
-				.flatMap(skill -> Stream.concat(Stream.of(skill.getName()), skill.getKeywords().stream()))
-				.toList();
+		List<String> terms = KeywordMatcher.termsOf(skills.list(userId));
 		return matcher.match(job.getDescription(), cvText, terms);
 	}
 

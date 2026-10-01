@@ -5,7 +5,6 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 
 public class KeywordMatcher {
 
@@ -44,10 +43,16 @@ public class KeywordMatcher {
 	}
 
 	private boolean containsWord(String text, String term) {
-		Pattern pattern = Pattern.compile(
-				"(?<![\\p{L}\\p{N}])" + Pattern.quote(term) + "(?![\\p{L}\\p{N}])",
-				Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
-		return pattern.matcher(text).find();
+		return WordMatch.contains(text, term);
+	}
+
+	public static List<String> termsOf(Collection<Skill> skills) {
+		List<String> terms = new ArrayList<>();
+		for (Skill skill : skills) {
+			terms.add(skill.getName());
+			terms.addAll(skill.getKeywords());
+		}
+		return terms;
 	}
 
 }
