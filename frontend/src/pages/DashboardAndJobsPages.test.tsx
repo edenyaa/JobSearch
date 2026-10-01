@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
 import { makeJob, makeSkill, mockApi, renderApp, USER } from '../test/helpers'
@@ -126,7 +126,7 @@ describe('DashboardPage', () => {
     })
     renderApp('/')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
   })
 })
 
@@ -206,5 +206,66 @@ describe('JobsPage', () => {
     const row = (await screen.findByRole('link', { name: 'Backend Engineer' })).closest('li')!
 
     expect(within(row).getByText('Interview')).toBeInTheDocument()
+  })
+
+  test('GivenJobs_WhenSortingByTitle_ThenOrderFollowsTheTitles', async () => {
+    mockApi({
+      'GET /api/users/1/jobs': {
+        body: [makeJob({ id: 1, title: 'Zeta', appliedDate: '2026-01-01' }), makeJob({ id: 2, title: 'Alpha', appliedDate: '2026-02-01' })],
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+    await screen.findByRole('link', { name: 'Zeta' })
+
+    expect(screen.getAllByRole('link', { name: /^(Zeta|Alpha)$/ }).map((a) => a.textContent)).toEqual(['Alpha', 'Zeta'])
+    await user.selectOptions(screen.getByLabelText('Sort jobs'), 'oldest')
+    expect(screen.getAllByRole('link', { name: /^(Zeta|Alpha)$/ }).map((a) => a.textContent)).toEqual(['Zeta', 'Alpha'])
+    await user.selectOptions(screen.getByLabelText('Sort jobs'), 'title')
+
+    expect(screen.getAllByRole('link', { name: /^(Zeta|Alpha)$/ }).map((a) => a.textContent)).toEqual(['Alpha', 'Zeta'])
+  })
+
+  test('GivenJobs_WhenOpening_ThenTheCountIsShown', async () => {
+    mockApi({ 'GET /api/users/1/jobs': { body: [makeJob({ id: 1 }), makeJob({ id: 2, title: 'Other' })] } })
+    renderApp('/jobs')
+
+    expect(await screen.findByText('2 jobs')).toBeInTheDocument()
+  })
+
+  test('GivenTableView_WhenSelecting_ThenJobsAreShownInATableWithActions', async () => {
+    mockApi({ 'GET /api/users/1/jobs': { body: [makeJob({ id: 5, title: 'Backend Engineer', status: 'OFFER' })] } })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+    await screen.findByRole('link', { name: 'Backend Engineer' })
+
+    await user.click(screen.getByRole('button', { name: 'Table view' }))
+
+    const row = screen.getByRole('link', { name: 'Backend Engineer' }).closest('tr')!
+    expect(within(row).getByText('Offer')).toBeInTheDocument()
+    expect(within(row).getByRole('link', { name: 'Analysis for Backend Engineer' })).toHaveAttribute('href', '/jobs/5/analysis')
+    expect(screen.getByRole('button', { name: 'Table view' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('GivenServerError_WhenClickingRetry_ThenJobsAreRequestedAgain', async () => {
+    const api = mockApi({ 'GET /api/users/1/jobs': { status: 500, body: { message: 'Database is down' } } })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+
+    await user.click(await screen.findByRole('button', { name: 'Retry connection' }))
+
+    await waitFor(() => expect(api.to('GET /api/users/1/jobs').length).toBeGreaterThanOrEqual(2))
+  })
+
+  test('GivenErrorState_WhenTogglingDetails_ThenHelpTextAppearsAndDisappears', async () => {
+    mockApi({ 'GET /api/users/1/jobs': { status: 500, body: { message: 'Database is down' } } })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+
+    await user.click(await screen.findByRole('button', { name: 'Show details' }))
+    expect(screen.getByTestId('error-details')).toHaveTextContent('backend is running')
+    await user.click(screen.getByRole('button', { name: 'Hide details' }))
+
+    expect(screen.queryByTestId('error-details')).not.toBeInTheDocument()
   })
 })

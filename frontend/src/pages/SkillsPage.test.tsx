@@ -196,6 +196,6 @@ describe('SkillsPage', () => {
     mockApi({ 'GET /api/users/1/skills': { status: 500, body: {} } })
     renderApp('/skills')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
   })
 })

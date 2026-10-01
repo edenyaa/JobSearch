@@ -5,7 +5,7 @@ import type { JobStatus } from '../api/types'
 import { useAuth } from '../auth/AuthContext'
 import { ChartLegend, DonutChart } from '../components/charts'
 import type { Segment } from '../components/charts'
-import { ErrorMessage, Loading } from '../components/ErrorMessage'
+import { ErrorState, Loading } from '../components/ErrorMessage'
 import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { useLoad } from '../hooks/useLoad'
@@ -26,7 +26,18 @@ export function DashboardPage() {
   const skills = useLoad(() => skillsApi.list(userId), [userId])
 
   if (jobs.loading || skills.loading) return <Loading />
-  if (jobs.error) return <ErrorMessage message={jobs.error} />
+  if (jobs.error) {
+    return (
+      <ErrorState
+        title="We could not load your dashboard"
+        message={jobs.error}
+        onRetry={() => {
+          jobs.reload()
+          skills.reload()
+        }}
+      />
+    )
+  }
 
   const allJobs = jobs.data ?? []
   const count = (status: string) => allJobs.filter((job) => job.status === status).length

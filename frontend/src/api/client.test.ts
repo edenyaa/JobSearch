@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest'
 import { mockApi, stubDownloads } from '../test/helpers'
-import { ApiError, configureClient, download, messageOf, request, saveBlob, upload } from './client'
+import { ApiError, configureClient, describeAction, download, messageOf, request, saveBlob, upload } from './client'
 
 async function failureOf(promise: Promise<unknown>): Promise<ApiError> {
   return (await promise.catch((e) => e)) as ApiError
@@ -49,7 +49,7 @@ describe('request', () => {
 
     expect(failure).toBeInstanceOf(ApiError)
     expect(failure.status).toBe(409)
-    expect(failure.message).toBe('Email already registered')
+    expect(failure.message).toContain('Email already registered')
   })
 
   test('GivenErrorWithoutMessage_WhenRequesting_ThenFallbackMessageForStatusIsUsed', async () => {
@@ -63,9 +63,9 @@ describe('request', () => {
     const badGateway = await failureOf(request('GET', '/b'))
     const forbidden = await failureOf(request('GET', '/c'))
 
-    expect(notFound.message).toBe('Not found.')
+    expect(notFound.message).toBe('Could not load the data: That item was not found. It may have been deleted.')
     expect(badGateway.message).toContain('AI service')
-    expect(forbidden.message).toBe('You are not allowed to do that.')
+    expect(forbidden.message).toBe('Could not load the data: You do not have permission to do that.')
   })
 
   test('GivenUnknownErrorStatus_WhenRequesting_ThenGenericMessageIncludesStatus', async () => {
@@ -73,7 +73,7 @@ describe('request', () => {
 
     const failure = await failureOf(request('GET', '/a'))
 
-    expect(failure.message).toBe('Something went wrong (418).')
+    expect(failure.message).toBe('Could not load the data: The server returned an unexpected response (418).')
   })
 
   test('GivenNonJsonErrorBody_WhenRequesting_ThenFallbackMessageIsUsed', async () => {
@@ -81,7 +81,7 @@ describe('request', () => {
 
     const failure = await failureOf(request('GET', '/a'))
 
-    expect(failure.message).toBe('The request was not valid.')
+    expect(failure.message).toContain('Some of the data sent was not valid')
   })
 
   test('GivenNetworkFailure_WhenRequesting_ThenApiErrorWithStatusZeroAndHelpfulMessage', async () => {
@@ -90,7 +90,7 @@ describe('request', () => {
     const failure = await failureOf(request('GET', '/a'))
 
     expect(failure.status).toBe(0)
-    expect(failure.message).toContain('Could not reach the server')
+    expect(failure.message).toContain('the server did not respond')
   })
 
   test('Given401WithToken_WhenRequesting_ThenUnauthorizedHandlerIsCalled', async () => {
@@ -167,5 +167,46 @@ describe('messageOf', () => {
 
   test('GivenNonError_WhenGettingMessage_ThenGenericMessageIsReturned', () => {
     expect(messageOf('nope')).toBe('Something went wrong.')
+  })
+})
+
+describe('describeAction', () => {
+  test('GivenMethodAndPath_WhenDescribing_ThenItNamesWhatFailed', () => {
+    expect(describeAction('GET', '/users/1/jobs')).toBe('Could not load jobs')
+    expect(describeAction('POST', '/users/1/jobs')).toBe('Could not save jobs')
+    expect(describeAction('DELETE', '/users/1/skills/4')).toBe('Could not delete skills')
+    expect(describeAction('POST', '/users/1/jobs/5/tailor')).toBe('Could not tailor your CV')
+    expect(describeAction('GET', '/users/1/jobs/5/analysis')).toBe('Could not load the analysis')
+    expect(describeAction('PUT', '/users/1/cv')).toBe('Could not save your CV')
+    expect(describeAction('POST', '/users/login')).toBe('Could not sign in')
+    expect(describeAction('POST', '/users')).toBe('Could not create the account')
+    expect(describeAction('POST', '/users/1/logout')).toBe('Could not sign out')
+    expect(describeAction('GET', '/unknown')).toBe('Could not load the data')
+    expect(describeAction('PUT', '/unknown')).toBe('Could not complete the request')
+  })
+
+  test('GivenServerErrorWithoutBody_WhenRequesting_ThenMessageExplainsTheBackendMayBeDown', async () => {
+    mockApi({ 'GET /api/users/1/jobs': { status: 500, body: {} } })
+
+    const failure = await failureOf(request('GET', '/users/1/jobs'))
+
+    expect(failure.message).toContain('Could not load jobs: The server hit an unexpected error')
+    expect(failure.message).toContain('backend may not be running')
+  })
+
+  test('GivenTooLargeFile_WhenUploading_ThenMessageStatesTheLimit', async () => {
+    mockApi({ 'PUT /api/users/1/cv': { status: 413, body: {} } })
+
+    const failure = await failureOf(request('PUT', '/users/1/cv'))
+
+    expect(failure.message).toBe('Could not save your CV: The file is too large. The limit is 10 MB.')
+  })
+
+  test('GivenUnauthorizedResponse_WhenRequesting_ThenMessageIsNotPrefixed', async () => {
+    mockApi({ 'GET /api/users/1/jobs': { status: 401, body: {} } })
+
+    const failure = await failureOf(request('GET', '/users/1/jobs'))
+
+    expect(failure.message).toBe('Your session is no longer valid. Please sign in again.')
   })
 })

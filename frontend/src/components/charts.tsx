@@ -92,14 +92,14 @@ export function StackedBar({ segments, ariaLabel }: { segments: Segment[]; ariaL
 }
 
 export const CATEGORY_COLORS = [
-  '#c0743a',
-  '#f2a516',
-  '#3f9b5f',
-  '#e5604f',
-  '#e0a063',
-  '#6bb5a0',
-  '#d98aa0',
-  '#8c6a4f',
-  '#f4c95d',
-  '#a65d28',
+  '#4338ca',
+  '#2563eb',
+  '#059669',
+  '#f59e0b',
+  '#e11d48',
+  '#8b5cf6',
+  '#0ea5e9',
+  '#14b8a6',
+  '#ec4899',
+  '#64748b',
 ]

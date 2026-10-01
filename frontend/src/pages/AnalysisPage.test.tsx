@@ -235,7 +235,7 @@ describe('AnalysisPage special cases', () => {
     })
     renderApp('/jobs/5/analysis')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
   })
 
   test('GivenUnknownJob_WhenOpening_ThenMessageIsShown', async () => {

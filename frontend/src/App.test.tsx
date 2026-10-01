@@ -43,7 +43,8 @@ describe('Layout and routing', () => {
     const user = userEvent.setup()
     renderApp('/')
 
-    await user.click(await screen.findByRole('button', { name: 'Sign out' }))
+    await user.click(await screen.findByRole('button', { name: 'Account menu' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Sign out' }))
 
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
     expect(api.to('POST /api/users/1/logout')).toHaveLength(1)

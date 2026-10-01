@@ -49,7 +49,7 @@ describe('LoginPage', () => {
     await user.type(screen.getByLabelText('Password'), 'secret123')
     await user.click(screen.getByRole('button', { name: 'Sign in' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Could not reach the server')
+    expect(await screen.findByRole('alert')).toHaveTextContent('the server did not respond')
   })
 
   test('GivenAlreadySignedIn_WhenOpeningLogin_ThenUserIsRedirectedToTheDashboard', async () => {

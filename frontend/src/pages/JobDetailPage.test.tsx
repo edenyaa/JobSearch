@@ -87,7 +87,7 @@ describe('JobDetailPage status and notes', () => {
 
     await user.selectOptions(select, 'OFFER')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
     expect(select).toHaveValue('APPLIED')
   })
 
@@ -307,7 +307,7 @@ describe('JobDetailPage delete', () => {
     await user.click(await screen.findByRole('button', { name: 'Delete job' }))
     await user.click(screen.getByRole('button', { name: 'Confirm delete' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
     expect(screen.getByRole('heading', { name: 'Backend Engineer' })).toBeInTheDocument()
   })
 })

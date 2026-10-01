@@ -17,15 +17,51 @@ export function configureClient(token: string | null, onUnauthorized: (() => voi
 }
 
 const FALLBACK_MESSAGES: Record<number, string> = {
-  400: 'The request was not valid.',
-  401: 'Please sign in again.',
-  403: 'You are not allowed to do that.',
-  404: 'Not found.',
+  400: 'Some of the data sent was not valid. Check the fields and try again.',
+  401: 'Your session is no longer valid. Please sign in again.',
+  403: 'You do not have permission to do that.',
+  404: 'That item was not found. It may have been deleted.',
   409: 'That already exists.',
+  413: 'The file is too large. The limit is 10 MB.',
+  500: 'The server hit an unexpected error and gave no details. The backend may not be running or may still be starting. Check the backend console for the error.',
   502: 'The AI service is unavailable right now. Try again in a minute.',
+  503: 'The server is temporarily unavailable. Try again in a moment.',
+  504: 'The server took too long to answer. Try again in a moment.',
 }
 
-async function toError(response: Response): Promise<ApiError> {
+const NOUNS: Record<string, string> = {
+  jobs: 'jobs',
+  skills: 'skills',
+  courses: 'courses',
+  cv: 'your CV',
+  resume: 'the resume file',
+  tailor: 'the tailored CV',
+  analysis: 'the analysis',
+  match: 'the keyword match',
+  status: 'the job status',
+  name: 'your name',
+  email: 'your email',
+  password: 'your password',
+  logout: 'your session',
+  text: 'your CV text',
+}
+
+export function describeAction(method: string, path: string): string {
+  const segments = path.split('?')[0].split('/').filter(Boolean)
+  if (segments[0] === 'users' && segments[1] === 'login') return 'Could not sign in'
+  if (segments[0] === 'users' && segments.length === 1 && method === 'POST') return 'Could not create the account'
+  const words = segments.filter((segment) => !/^\d+$/.test(segment) && segment !== 'users')
+  const last = words[words.length - 1]
+  const noun = last ? NOUNS[last] : undefined
+  if (last === 'tailor') return 'Could not tailor your CV'
+  if (last === 'logout') return 'Could not sign out'
+  if (!noun) return method === 'GET' ? 'Could not load the data' : 'Could not complete the request'
+  if (method === 'GET') return `Could not load ${noun}`
+  if (method === 'DELETE') return `Could not delete ${noun}`
+  return `Could not save ${noun}`
+}
+
+async function toError(response: Response, action: string): Promise<ApiError> {
   let message = ''
   try {
     const data = await response.json()
@@ -36,12 +72,14 @@ async function toError(response: Response): Promise<ApiError> {
     message = ''
   }
   if (!message) {
-    message = FALLBACK_MESSAGES[response.status] ?? `Something went wrong (${response.status}).`
+    message = FALLBACK_MESSAGES[response.status] ?? `The server returned an unexpected response (${response.status}).`
   }
-  return new ApiError(response.status, message)
+  const text = response.status === 401 ? message : `${action}: ${message}`
+  return new ApiError(response.status, text)
 }
 
 async function send(path: string, init: RequestInit): Promise<Response> {
+  const action = describeAction(init.method ?? 'GET', path)
   const headers = new Headers(init.headers)
   if (currentToken) {
     headers.set('Authorization', `Bearer ${currentToken}`)
@@ -50,13 +88,13 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   try {
     response = await fetch(`/api${path}`, { ...init, headers })
   } catch {
-    throw new ApiError(0, 'Could not reach the server. Is the backend running?')
+    throw new ApiError(0, `${action}: the server did not respond. Make sure the backend is running (./mvnw spring-boot:run) and try again.`)
   }
   if (!response.ok) {
     if (response.status === 401 && currentToken && unauthorizedHandler) {
       unauthorizedHandler()
     }
-    throw await toError(response)
+    throw await toError(response, action)
   }
   return response
 }

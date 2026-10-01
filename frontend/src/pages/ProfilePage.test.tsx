@@ -13,7 +13,7 @@ describe('ProfilePage account', () => {
 
     expect(screen.getByRole('heading', { name: 'Profile' })).toBeInTheDocument()
     expect(screen.getAllByText('Dana Levi').length).toBeGreaterThan(0)
-    expect(screen.getByText('dana@example.com')).toBeInTheDocument()
+    expect(within(screen.getByRole('main')).getByText('dana@example.com')).toBeInTheDocument()
   })
 
   test('GivenNewName_WhenUpdating_ThenServerGetsOldAndNewNameAndNavigationShowsIt', async () => {
@@ -41,7 +41,7 @@ describe('ProfilePage account', () => {
 
     expect(await screen.findByText('Email updated.')).toBeInTheDocument()
     expect(api.to('PUT /api/users/1/email')[0].body).toEqual({ oldValue: 'dana@example.com', newValue: 'new@example.com' })
-    expect(screen.getByText('new@example.com')).toBeInTheDocument()
+    expect(within(screen.getByRole('main')).getByText('new@example.com')).toBeInTheDocument()
   })
 
   test('GivenEmailOfAnotherUser_WhenUpdating_ThenConflictMessageIsShown', async () => {
@@ -53,7 +53,7 @@ describe('ProfilePage account', () => {
     await user.click(screen.getByRole('button', { name: 'Update email' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Email already registered')
-    expect(screen.getByText('dana@example.com')).toBeInTheDocument()
+    expect(within(screen.getByRole('main')).getByText('dana@example.com')).toBeInTheDocument()
   })
 })
 
@@ -169,7 +169,7 @@ describe('ProfilePage main CV', () => {
 
     await user.upload(screen.getByLabelText(CV_LABEL), new File(['x'], 'cv.txt', { type: 'text/plain' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
   })
 
   test('GivenCv_WhenDownloading_ThenFileIsFetchedAndSaved', async () => {
@@ -251,7 +251,7 @@ describe('ProfilePage delete account', () => {
     await user.type(screen.getByLabelText('Type your email to confirm'), 'dana@example.com')
     await user.click(screen.getByRole('button', { name: 'Delete my account' }))
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Something went wrong (500).')
+    expect(await screen.findByRole('alert')).toHaveTextContent('The server hit an unexpected error')
     expect(localStorage.getItem('ats.session')).not.toBeNull()
   })
 })
