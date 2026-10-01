@@ -1,0 +1,11 @@
+target
+.git
+.github
+.claude
+.kilo
+.vscode
+.idea
+.env
+HELP.md
+frontend
+**/node_modules
