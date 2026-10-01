@@ -65,7 +65,8 @@ public class TailoringPipeline {
 		}
 		GapAnalysis gap = gapAnalyzer.analyze(job, resumeText, knownSkills);
 
-		TailoredCv withSkills = withSkills(parsed, knownSkills, gap, extraAdditional);
+		TailoredCv withSkills = withSkills(parsed, job, userSkills == null ? List.of() : List.copyOf(userSkills),
+				extraAdditional);
 		TailoredCv normalized = normalizer.normalize(withSkills, gap.namingMismatches());
 
 		String groundTruth = resumeText + "\n" + String.join("\n", knownSkills);
@@ -96,32 +97,28 @@ public class TailoringPipeline {
 		return cv;
 	}
 
-	private TailoredCv withSkills(TailoredCv cv, List<String> skills, GapAnalysis gap, List<String> extraAdditional) {
-		Set<String> matched = new HashSet<>();
-		gap.matchedSkills().forEach(m -> matched.add(m.toLowerCase(Locale.ROOT)));
+	private TailoredCv withSkills(TailoredCv cv, ParsedJob job, List<String> userSkills, List<String> extraAdditional) {
 		Map<String, String> unique = new LinkedHashMap<>();
-		for (String skill : skills) {
+		for (String skill : cv.skills()) {
 			if (skill != null && !skill.isBlank()) {
 				unique.putIfAbsent(skill.trim().toLowerCase(Locale.ROOT), skill.trim());
 			}
 		}
-		List<String> ordered = new ArrayList<>();
-		unique.forEach((key, value) -> {
-			if (matched.contains(key)) {
-				ordered.add(value);
+		if (cv.hasSection("skills")) {
+			Set<String> wanted = new HashSet<>();
+			job.targetTerms().forEach(t -> wanted.add(t.toLowerCase(Locale.ROOT)));
+			for (String skill : userSkills) {
+				if (skill != null && wanted.contains(skill.trim().toLowerCase(Locale.ROOT))) {
+					unique.putIfAbsent(skill.trim().toLowerCase(Locale.ROOT), skill.trim());
+				}
 			}
-		});
-		unique.forEach((key, value) -> {
-			if (!matched.contains(key)) {
-				ordered.add(value);
-			}
-		});
+		}
 		List<String> additional = new ArrayList<>(cv.additional());
-		if (extraAdditional != null) {
+		if (extraAdditional != null && cv.hasSection("additional")) {
 			extraAdditional.stream().filter(a -> !additional.contains(a)).forEach(additional::add);
 		}
-		return new TailoredCv(cv.name(), cv.contact(), cv.summary(), ordered, cv.experience(), cv.projects(),
-				cv.education(), additional);
+		return new TailoredCv(cv.name(), cv.contact(), cv.summary(), List.copyOf(unique.values()), cv.experience(),
+				cv.projects(), cv.education(), additional, cv.sections());
 	}
 
 	private TailoredCv optimizeBullets(ParsedJob job, TailoredCv cv, String groundTruth, GapAnalysis gap,
@@ -177,7 +174,7 @@ public class TailoringPipeline {
 						p.bullets().stream().map(b -> finalText.get(next[0]++)).toList()))
 				.toList();
 		return new TailoredCv(cv.name(), cv.contact(), cv.summary(), cv.skills(), experience, projects, cv.education(),
-				cv.additional());
+				cv.additional(), cv.sections());
 	}
 
 	private String context(String first, String second) {

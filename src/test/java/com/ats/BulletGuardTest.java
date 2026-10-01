@@ -101,4 +101,17 @@ class BulletGuardTest {
         assertNull(guard.bannedWordIn(null));
     }
 
+    @Test
+    public void GivenSmallEdit_WhenChecking_ThenItIsAccepted() {
+        assertTrue(guard.check("Wrote REST APIs in Java for billing", "Built REST APIs in Java for billing", RESUME).accepted());
+    }
+
+    @Test
+    public void GivenCompleteRewrite_WhenChecking_ThenItIsRejectedAsTooDifferent() {
+        Verdict verdict = guard.check("Wrote REST APIs in Java for billing", "Designed payment services handling invoices", RESUME);
+
+        assertFalse(verdict.accepted());
+        assertTrue(verdict.reason().contains("too much"));
+    }
+
 }

@@ -14,47 +14,42 @@ public final class AtsLayout {
 			lines.add("# " + cv.name());
 		}
 		cv.contact().stream().filter(AtsLayout::present).forEach(lines::add);
-		if (present(cv.summary())) {
-			lines.add("");
-			lines.add("## SUMMARY");
-			lines.add(cv.summary());
-		}
-		if (!cv.skills().isEmpty()) {
-			lines.add("");
-			lines.add("## SKILLS");
-			lines.add(String.join(", ", cv.skills()));
-		}
-		if (!cv.experience().isEmpty()) {
-			lines.add("");
-			lines.add("## EXPERIENCE");
-			for (TailoredCv.Experience job : cv.experience()) {
-				lines.add("");
-				lines.add("### " + join(job.role(), job.company(), job.period()));
-				job.bullets().stream().filter(AtsLayout::present).forEach(b -> lines.add("- " + b));
+		for (TailoredCv.Section section : cv.orderedSections()) {
+			if (!cv.hasContent(section.type())) {
+				continue;
 			}
-		}
-		if (!cv.projects().isEmpty()) {
 			lines.add("");
-			lines.add("## PROJECTS");
-			for (TailoredCv.Project project : cv.projects()) {
-				lines.add("");
-				lines.add("### " + join(project.name(), String.join(", ", project.technologies())));
-				project.bullets().stream().filter(AtsLayout::present).forEach(b -> lines.add("- " + b));
+			lines.add("## " + heading(section));
+			switch (section.type()) {
+				case "summary" -> lines.add(cv.summary());
+				case "skills" -> lines.add(String.join(", ", cv.skills()));
+				case "experience" -> {
+					for (TailoredCv.Experience job : cv.experience()) {
+						lines.add("");
+						lines.add("### " + join(job.role(), job.company(), job.period()));
+						job.bullets().stream().filter(AtsLayout::present).forEach(b -> lines.add("- " + b));
+					}
+				}
+				case "projects" -> {
+					for (TailoredCv.Project project : cv.projects()) {
+						lines.add("");
+						lines.add("### " + join(project.name(), String.join(", ", project.technologies())));
+						project.bullets().stream().filter(AtsLayout::present).forEach(b -> lines.add("- " + b));
+					}
+				}
+				case "education" -> {
+					for (TailoredCv.Education education : cv.education()) {
+						lines.add(join(education.degree(), education.institution(), education.period()));
+					}
+				}
+				default -> cv.additional().stream().filter(AtsLayout::present).forEach(x -> lines.add("- " + x));
 			}
-		}
-		if (!cv.education().isEmpty()) {
-			lines.add("");
-			lines.add("## EDUCATION");
-			for (TailoredCv.Education education : cv.education()) {
-				lines.add(join(education.degree(), education.institution(), education.period()));
-			}
-		}
-		if (!cv.additional().isEmpty()) {
-			lines.add("");
-			lines.add("## ADDITIONAL");
-			cv.additional().stream().filter(AtsLayout::present).forEach(a -> lines.add("- " + a));
 		}
 		return String.join("\n", lines).trim() + "\n";
+	}
+
+	public static String heading(TailoredCv.Section section) {
+		return present(section.heading()) ? section.heading().trim() : TailoredCv.defaultHeading(section.type());
 	}
 
 	public static String join(String... parts) {

@@ -16,6 +16,7 @@ public class BulletGuard {
 			"transformative", "revolutionary", "strategic thinker", "hard-working", "motivated");
 
 	private static final int MAX_LENGTH = 300;
+	private static final double MIN_SIMILARITY = 0.5;
 	private static final Pattern NUMBER = Pattern
 			.compile("\\d+(?:[.,]\\d+)*\\s?(?:%|[kKmMbB](?![\\p{L}\\p{N}])|[xX](?![\\p{L}\\p{N}]))?");
 
@@ -42,6 +43,9 @@ public class BulletGuard {
 		if (!invented.isEmpty()) {
 			return new Verdict(false, preserved, "adds numbers that are not in the original: " + invented);
 		}
+		if (similarity(original, optimized) < MIN_SIMILARITY) {
+			return new Verdict(false, preserved, "changes the bullet too much");
+		}
 		Set<String> allowed = new HashSet<>();
 		SkillCatalog.detect(resumeText).forEach(d -> allowed.add(d.name()));
 		SkillCatalog.detect(original).forEach(d -> allowed.add(d.name()));
@@ -51,6 +55,28 @@ public class BulletGuard {
 			}
 		}
 		return new Verdict(true, preserved, "");
+	}
+
+	static double similarity(String original, String optimized) {
+		Set<String> kept = wordsOf(original);
+		if (kept.isEmpty()) {
+			return 1.0;
+		}
+		Set<String> candidate = wordsOf(optimized);
+		long shared = kept.stream().filter(candidate::contains).count();
+		return (double) shared / kept.size();
+	}
+
+	private static Set<String> wordsOf(String text) {
+		Set<String> words = new HashSet<>();
+		if (text != null) {
+			for (String word : text.toLowerCase(Locale.ROOT).split("[^\\p{L}\\p{N}+#.]+")) {
+				if (word.length() >= 3) {
+					words.add(word);
+				}
+			}
+		}
+		return words;
 	}
 
 	public String bannedWordIn(String text) {

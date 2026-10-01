@@ -55,6 +55,17 @@ class TailorApiTest extends ApiTestSupport {
                 """.formatted(skillsJson, bullet);
     }
 
+    private String resumeWithSections(String sectionsJson, String skillsJson) {
+        return """
+                {"name":"[[NAME]] Yaakobi","contact":["[[EMAIL_1]]"],
+                 "summary":"",
+                 "skills":%s,
+                 "experience":[{"role":"Backend Engineer","company":"Acme","period":"2019 - 2023","bullets":["Built REST APIs"]}],
+                 "projects":[],"education":[{"degree":"BSc CS","institution":"TAU","period":"2015 - 2018"}],"additional":[],
+                 "sections":%s}
+                """.formatted(skillsJson, sectionsJson);
+    }
+
     private String bulletsJson(String optimized) {
         return "{\"bullets\":[{\"id\":0,\"optimizedBullet\":\"" + optimized + "\",\"matchedRequirement\":\"Java\"}]}";
     }
@@ -179,7 +190,7 @@ class TailorApiTest extends ApiTestSupport {
 
         mvc.perform(post(tailorUrl(account, jobId)).header("Authorization", account.bearer()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.resumeMarkdown", containsString("Kubernetes, Java")))
+                .andExpect(jsonPath("$.resumeMarkdown", containsString("Java, Kubernetes")))
                 .andExpect(jsonPath("$.resumeMarkdown", containsString("Course: CS101 (TAU)")))
                 .andExpect(jsonPath("$.resumeMarkdown", not(containsString("ART9"))))
                 .andExpect(jsonPath("$.unsupportedSkills", hasSize(0)));
@@ -468,6 +479,76 @@ class TailorApiTest extends ApiTestSupport {
         mvc.perform(post(tailorUrl(account, jobId)).header("Authorization", account.bearer())).andExpect(status().isOk());
 
         assertTrue(extractor.extract(resumeFile(account, jobId), "cv.docx").contains("Second version"));
+    }
+
+    @Test
+    public void GivenCvWithItsOwnSectionOrderAndHeadings_WhenTailoring_ThenTheResumeKeepsThem() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, CV);
+        long jobId = createJob(account, "Java role");
+        String sections = "[{\"type\":\"education\",\"heading\":\"Studies\"},{\"type\":\"experience\",\"heading\":\"Work History\"},{\"type\":\"skills\",\"heading\":\"Tech Stack\"}]";
+        stub(jobJson("[\"Java\"]"), resumeWithSections(sections, "[\"Java\"]"), bulletsJson("Built REST APIs"));
+
+        String body = mvc.perform(post(tailorUrl(account, jobId)).header("Authorization", account.bearer()))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        int studies = body.indexOf("## Studies");
+        int work = body.indexOf("## Work History");
+        int stack = body.indexOf("## Tech Stack");
+        assertTrue(studies > 0 && studies < work && work < stack);
+        assertFalse(body.contains("## SUMMARY"));
+        String text = extractor.extract(resumeFile(account, jobId), "cv.docx");
+        assertTrue(text.indexOf("Studies") < text.indexOf("Work History"));
+        assertTrue(text.indexOf("Work History") < text.indexOf("Tech Stack"));
+    }
+
+    @Test
+    public void GivenCvWithoutSkillsOrAdditionalSection_WhenTailoring_ThenNoNewSectionOrSkillIsAdded() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, CV);
+        createSkill(account, "{\"name\":\"Kubernetes\"}");
+        mvc.perform(json(post("/api/users/" + account.id() + "/courses"), account,
+                "{\"courseNumber\":\"CS101\",\"institution\":\"TAU\",\"description\":\"Kubernetes lab\"}"))
+                .andExpect(status().isCreated());
+        long jobId = createJob(account, "Kubernetes role");
+        String sections = "[{\"type\":\"experience\",\"heading\":\"Experience\"},{\"type\":\"education\",\"heading\":\"Education\"}]";
+        stub(jobJson("[\"Kubernetes\"]"), resumeWithSections(sections, "[]"), bulletsJson("Built REST APIs"));
+
+        mvc.perform(post(tailorUrl(account, jobId)).header("Authorization", account.bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumeMarkdown", not(containsString("Kubernetes"))))
+                .andExpect(jsonPath("$.resumeMarkdown", not(containsString("Course:"))))
+                .andExpect(jsonPath("$.resumeMarkdown", not(containsString("## SKILLS"))));
+    }
+
+    @Test
+    public void GivenCvWithSkillsSection_WhenTailoring_ThenOriginalSkillOrderIsKeptAndJobSkillsAreAppended() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, CV);
+        createSkill(account, "{\"name\":\"Kubernetes\"}");
+        long jobId = createJob(account, "Kubernetes and Java");
+        String sections = "[{\"type\":\"skills\",\"heading\":\"Skills\"},{\"type\":\"experience\",\"heading\":\"Experience\"}]";
+        stub(jobJson("[\"Java\",\"Kubernetes\"]"), resumeWithSections(sections, "[\"Git\",\"Java\"]"),
+                bulletsJson("Built REST APIs"));
+
+        mvc.perform(post(tailorUrl(account, jobId)).header("Authorization", account.bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumeMarkdown", containsString("## Skills\nGit, Java, Kubernetes")));
+    }
+
+    @Test
+    public void GivenOptimizedBulletRewritesTheOriginalCompletely_WhenTailoring_ThenOriginalBulletIsKept() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, CV);
+        long jobId = createJob(account, "Java role");
+        stub(jobJson("[\"Java\"]"), resumeJson("[\"Java\"]", "Built REST APIs"),
+                bulletsJson("Designed scalable Java services for payments"));
+
+        mvc.perform(post(tailorUrl(account, jobId)).header("Authorization", account.bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.rejectedBullets[0]", containsString("changes the bullet too much")))
+                .andExpect(jsonPath("$.resumeMarkdown", containsString("- Built REST APIs")));
     }
 
 }

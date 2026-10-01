@@ -68,4 +68,37 @@ class AtsLayoutTest {
         assertEquals("", AtsLayout.join(null, ""));
     }
 
+    @Test
+    public void GivenCvWithSections_WhenRenderingMarkdown_ThenOriginalOrderAndHeadingsAreUsed() {
+        TailoredCv cv = new TailoredCv("Eden", null, null, List.of("Java"),
+                List.of(new Experience("Dev", "Acme", "2020", List.of("Built APIs"))), null,
+                List.of(new Education("BSc", "TAU", "2018")), null,
+                List.of(new TailoredCv.Section("education", "Studies"), new TailoredCv.Section("experience", "Work History"),
+                        new TailoredCv.Section("skills", "Tech Stack")));
+
+        String markdown = AtsLayout.markdown(cv);
+
+        assertTrue(markdown.indexOf("## Studies") < markdown.indexOf("## Work History"));
+        assertTrue(markdown.indexOf("## Work History") < markdown.indexOf("## Tech Stack"));
+        assertFalse(markdown.contains("## EXPERIENCE"));
+    }
+
+    @Test
+    public void GivenSectionsWithUnknownTypeOrDuplicates_WhenBuildingCv_ThenTheyAreIgnored() {
+        TailoredCv cv = new TailoredCv("Eden", null, null, List.of("Java"), null, null, null, null,
+                List.of(new TailoredCv.Section("hobbies", "Fun"), new TailoredCv.Section("SKILLS", "Skills"),
+                        new TailoredCv.Section("skills", "Again")));
+
+        assertEquals(1, cv.orderedSections().size());
+        assertEquals("Skills", cv.orderedSections().get(0).heading());
+    }
+
+    @Test
+    public void GivenSectionsThatMissContent_WhenBuildingCv_ThenContentIsAppendedUnderDefaultHeading() {
+        TailoredCv cv = new TailoredCv("Eden", null, null, List.of("Java"), null, null, null, List.of("Mentor"),
+                List.of(new TailoredCv.Section("skills", "Skills")));
+
+        assertEquals(List.of("skills", "additional"), cv.orderedSections().stream().map(TailoredCv.Section::type).toList());
+    }
+
 }

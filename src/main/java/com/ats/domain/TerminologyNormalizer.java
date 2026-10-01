@@ -16,7 +16,7 @@ public class TerminologyNormalizer {
 		}
 		TailoredCv replaced = cv.map(text -> normalize(text, mismatches));
 		return new TailoredCv(replaced.name(), replaced.contact(), replaced.summary(), distinct(replaced.skills()),
-				replaced.experience(), replaced.projects(), replaced.education(), replaced.additional());
+				replaced.experience(), replaced.projects(), replaced.education(), replaced.additional(), replaced.sections());
 	}
 
 	public String normalize(String text, List<NamingMismatch> mismatches) {

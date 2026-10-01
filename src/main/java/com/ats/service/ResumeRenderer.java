@@ -1,5 +1,6 @@
 package com.ats.service;
 
+import com.ats.domain.AtsLayout;
 import com.ats.domain.TailoredCv;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -17,42 +18,40 @@ public class ResumeRenderer {
 			for (String contact : cv.contact()) {
 				line(document, contact, 11, false);
 			}
-			if (notBlank(cv.summary())) {
-				heading(document, "SUMMARY");
-				line(document, cv.summary(), 11, false);
-			}
-			if (!cv.skills().isEmpty()) {
-				heading(document, "SKILLS");
-				line(document, String.join(", ", cv.skills()), 11, false);
-			}
-			if (!cv.experience().isEmpty()) {
-				heading(document, "EXPERIENCE");
-				for (TailoredCv.Experience job : cv.experience()) {
-					line(document, join(job.role(), job.company(), job.period()), 11, true);
-					for (String bullet : job.bullets()) {
-						line(document, "• " + bullet, 11, false);
+			for (TailoredCv.Section section : cv.orderedSections()) {
+				if (!cv.hasContent(section.type())) {
+					continue;
+				}
+				heading(document, AtsLayout.heading(section));
+				switch (section.type()) {
+					case "summary" -> line(document, cv.summary(), 11, false);
+					case "skills" -> line(document, String.join(", ", cv.skills()), 11, false);
+					case "experience" -> {
+						for (TailoredCv.Experience job : cv.experience()) {
+							line(document, join(job.role(), job.company(), job.period()), 11, true);
+							for (String bullet : job.bullets()) {
+								line(document, "• " + bullet, 11, false);
+							}
+						}
 					}
-				}
-			}
-			if (!cv.projects().isEmpty()) {
-				heading(document, "PROJECTS");
-				for (TailoredCv.Project project : cv.projects()) {
-					line(document, join(project.name(), String.join(", ", project.technologies())), 11, true);
-					for (String bullet : project.bullets()) {
-						line(document, "• " + bullet, 11, false);
+					case "projects" -> {
+						for (TailoredCv.Project project : cv.projects()) {
+							line(document, join(project.name(), String.join(", ", project.technologies())), 11, true);
+							for (String bullet : project.bullets()) {
+								line(document, "• " + bullet, 11, false);
+							}
+						}
 					}
-				}
-			}
-			if (!cv.education().isEmpty()) {
-				heading(document, "EDUCATION");
-				for (TailoredCv.Education education : cv.education()) {
-					line(document, join(education.degree(), education.institution(), education.period()), 11, false);
-				}
-			}
-			if (!cv.additional().isEmpty()) {
-				heading(document, "ADDITIONAL");
-				for (String item : cv.additional()) {
-					line(document, "• " + item, 11, false);
+					case "education" -> {
+						for (TailoredCv.Education education : cv.education()) {
+							line(document, join(education.degree(), education.institution(), education.period()), 11, false);
+						}
+					}
+					default -> {
+						for (String item : cv.additional()) {
+							line(document, "• " + item, 11, false);
+						}
+					}
 				}
 			}
 			document.write(out);

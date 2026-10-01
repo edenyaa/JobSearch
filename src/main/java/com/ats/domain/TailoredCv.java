@@ -12,11 +12,23 @@ public record TailoredCv(
 		List<Experience> experience,
 		List<Project> projects,
 		List<Education> education,
-		List<String> additional) {
+		List<String> additional,
+		List<Section> sections) {
+
+	public static final List<String> SECTION_TYPES = List.of("summary", "skills", "experience", "projects", "education",
+			"additional");
+
+	public record Section(String type, String heading) {
+	}
 
 	public TailoredCv(String name, List<String> contact, String summary, List<String> skills,
 			List<Experience> experience, List<Education> education, List<String> additional) {
-		this(name, contact, summary, skills, experience, null, education, additional);
+		this(name, contact, summary, skills, experience, null, education, additional, null);
+	}
+
+	public TailoredCv(String name, List<String> contact, String summary, List<String> skills,
+			List<Experience> experience, List<Project> projects, List<Education> education, List<String> additional) {
+		this(name, contact, summary, skills, experience, projects, education, additional, null);
 	}
 
 	public TailoredCv {
@@ -26,6 +38,43 @@ public record TailoredCv(
 		projects = projects == null ? List.of() : List.copyOf(projects);
 		education = education == null ? List.of() : List.copyOf(education);
 		additional = additional == null ? List.of() : List.copyOf(additional);
+		sections = sections == null ? List.of()
+				: sections.stream().filter(x -> x != null && x.type() != null && SECTION_TYPES.contains(x.type().trim().toLowerCase()))
+						.map(x -> new Section(x.type().trim().toLowerCase(), x.heading())).toList();
+	}
+
+	public List<Section> orderedSections() {
+		List<Section> ordered = new ArrayList<>();
+		for (Section section : sections) {
+			if (ordered.stream().noneMatch(o -> o.type().equals(section.type()))) {
+				ordered.add(section);
+			}
+		}
+		for (String type : SECTION_TYPES) {
+			if (ordered.stream().noneMatch(o -> o.type().equals(type)) && hasContent(type)) {
+				ordered.add(new Section(type, null));
+			}
+		}
+		return ordered;
+	}
+
+	public boolean hasSection(String type) {
+		return sections.isEmpty() || sections.stream().anyMatch(x -> x.type().equals(type));
+	}
+
+	public boolean hasContent(String type) {
+		return switch (type) {
+			case "summary" -> summary != null && !summary.isBlank();
+			case "skills" -> !skills.isEmpty();
+			case "experience" -> !experience.isEmpty();
+			case "projects" -> !projects.isEmpty();
+			case "education" -> !education.isEmpty();
+			default -> !additional.isEmpty();
+		};
+	}
+
+	public static String defaultHeading(String type) {
+		return type.toUpperCase();
 	}
 
 	public record Experience(String role, String company, String period, List<String> bullets) {
@@ -59,7 +108,8 @@ public record TailoredCv(
 						p.bullets().stream().map(b -> apply(f, b)).toList())).toList(),
 				education.stream().map(e -> new Education(apply(f, e.degree()), apply(f, e.institution()),
 						apply(f, e.period()))).toList(),
-				additional.stream().map(s -> apply(f, s)).toList());
+				additional.stream().map(s -> apply(f, s)).toList(),
+				sections);
 	}
 
 	public String plainText() {
