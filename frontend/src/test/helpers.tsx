@@ -1,7 +1,7 @@
 import { render } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
-import type { Analysis, Course, Job, Skill, User } from '../api/types'
+import type { Analysis, Company, Course, Job, Skill, User } from '../api/types'
 import { AppRoutes, ROUTER_FUTURE } from '../App'
 import { AuthProvider } from '../auth/AuthContext'
 
@@ -105,6 +105,16 @@ export function makeCourse(overrides: Partial<Course> = {}): Course {
     description: 'Intro course',
     assignments: ['Built a compiler'],
     skillIds: [],
+    ...overrides,
+  }
+}
+
+export function makeCompany(overrides: Partial<Company> = {}): Company {
+  return {
+    id: 1,
+    name: 'Acme',
+    contacts: [],
+    jobs: [],
     ...overrides,
   }
 }

@@ -91,6 +91,7 @@ describe('request', () => {
 
     expect(failure.status).toBe(0)
     expect(failure.message).toContain('the server did not respond')
+    expect(failure.message).toContain('CORS_ALLOWED_ORIGINS must include http://localhost:3000')
   })
 
   test('Given401WithToken_WhenRequesting_ThenUnauthorizedHandlerIsCalled', async () => {

@@ -1,6 +1,8 @@
 import { download, request, upload } from './client'
 import type {
   Analysis,
+  Company,
+  CompanyInput,
   Course,
   CourseInput,
   CvUpload,
@@ -49,6 +51,14 @@ export const coursesApi = {
   update: (userId: number, id: number, input: CourseInput) =>
     request<Course>('PUT', `/users/${userId}/courses/${id}`, input),
   remove: (userId: number, id: number) => request<void>('DELETE', `/users/${userId}/courses/${id}`),
+}
+
+export const companiesApi = {
+  list: (userId: number) => request<Company[]>('GET', `/users/${userId}/companies`),
+  create: (userId: number, input: CompanyInput) => request<Company>('POST', `/users/${userId}/companies`, input),
+  update: (userId: number, id: number, input: CompanyInput) =>
+    request<Company>('PUT', `/users/${userId}/companies/${id}`, input),
+  remove: (userId: number, id: number) => request<void>('DELETE', `/users/${userId}/companies/${id}`),
 }
 
 export const jobsApi = {

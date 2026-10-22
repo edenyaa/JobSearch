@@ -57,6 +57,42 @@ export interface CourseInput {
   skillIds: number[]
 }
 
+export interface ContactPerson {
+  name: string | null
+  whereKnown: string | null
+  linkedin: string | null
+  phone: string | null
+  description: string | null
+}
+
+export interface CompanyJob {
+  id: number
+  jobNumber: string
+  title: string | null
+  status: JobStatus
+  appliedDate: string
+}
+
+export interface Company {
+  id: number
+  name: string
+  contacts: ContactPerson[]
+  jobs: CompanyJob[]
+}
+
+export interface ContactInput {
+  name: string
+  whereKnown: string
+  linkedin: string
+  phone: string
+  description: string
+}
+
+export interface CompanyInput {
+  name: string
+  contacts: ContactInput[]
+}
+
 export interface Job {
   id: number
   jobNumber: string

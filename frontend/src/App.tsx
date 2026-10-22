@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './auth/AuthContext'
 import { RequireAuth } from './auth/RequireAuth'
 import { Layout } from './components/Layout'
 import { AnalysisPage } from './pages/AnalysisPage'
+import { CompaniesPage } from './pages/CompaniesPage'
 import { CoursesPage } from './pages/CoursesPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { JobDetailPage } from './pages/JobDetailPage'
@@ -37,6 +38,7 @@ export function AppRoutes() {
           <Route path="/jobs/:jobId/edit" element={<JobFormPage />} />
           <Route path="/jobs/:jobId/analysis" element={<AnalysisPage />} />
           <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/courses" element={<CoursesPage />} />
           <Route path="/profile" element={<ProfilePage />} />
         </Route>

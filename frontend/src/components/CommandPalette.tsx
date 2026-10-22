@@ -15,6 +15,7 @@ const COMMANDS: Command[] = [
   { label: 'Go to Jobs', to: '/jobs', icon: 'jobs' },
   { label: 'Add a job', to: '/jobs/new', icon: 'plus' },
   { label: 'Go to Skills', to: '/skills', icon: 'skills' },
+  { label: 'Go to Companies', to: '/companies', icon: 'companies' },
   { label: 'Go to Courses', to: '/courses', icon: 'courses' },
   { label: 'Go to Profile', to: '/profile', icon: 'profile' },
 ]

@@ -1,4 +1,4 @@
-import { apiUrl } from './config'
+import { API_BASE_URL, apiUrl } from './config'
 
 export class ApiError extends Error {
   readonly status: number
@@ -90,7 +90,7 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   try {
     response = await fetch(apiUrl(path), { ...init, headers })
   } catch {
-    throw new ApiError(0, `${action}: the server did not respond. Make sure the backend is running (./mvnw spring-boot:run) and try again.`)
+    throw new ApiError(0, `${action}: the server did not respond. Either the backend at ${API_BASE_URL || 'this site'} is down or starting up, or it does not allow this website (the backend's CORS_ALLOWED_ORIGINS must include ${window.location.origin}).`)
   }
   if (!response.ok) {
     if (response.status === 401 && currentToken && unauthorizedHandler) {

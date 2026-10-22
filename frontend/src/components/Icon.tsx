@@ -5,6 +5,7 @@ export type IconName =
   | 'jobs'
   | 'skills'
   | 'courses'
+  | 'companies'
   | 'profile'
   | 'logout'
   | 'check'
@@ -42,6 +43,13 @@ const PATHS: Record<IconName, ReactNode> = {
     <>
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+    </>
+  ),
+  companies: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="1" />
+      <path d="M9 21v-4h6v4" />
+      <path d="M8 7h.01M12 7h.01M16 7h.01M8 11h.01M12 11h.01M16 11h.01" />
     </>
   ),
   profile: (

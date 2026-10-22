@@ -8,3 +8,5 @@ export function resolveBase(configured: string | undefined): string {
 export function apiUrl(path: string, base: string = resolveBase(import.meta.env.VITE_API_URL)): string {
   return `${base}/api${path}`
 }
+
+export const API_BASE_URL = resolveBase(import.meta.env.VITE_API_URL)
