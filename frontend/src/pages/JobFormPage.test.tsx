@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
-import { makeJob, mockApi, renderApp } from '../test/helpers'
+import { makeCompany, makeJob, mockApi, renderApp } from '../test/helpers'
 import { toJobInput } from './JobFormPage'
 
 describe('JobFormPage create', () => {
@@ -28,6 +28,7 @@ describe('JobFormPage create', () => {
 
   test('GivenAllFields_WhenSaving_ThenEverythingIsSent', async () => {
     const api = mockApi({
+      'GET /api/users/1/companies': { body: [makeCompany({ name: 'Acme' })] },
       'POST /api/users/1/jobs': { status: 201, body: makeJob({ id: 9 }) },
       'GET /api/users/1/jobs/9': { body: makeJob({ id: 9 }) },
     })
@@ -35,7 +36,8 @@ describe('JobFormPage create', () => {
     renderApp('/jobs/new')
 
     await user.type(screen.getByLabelText('Job title'), 'Backend')
-    await user.type(screen.getByLabelText('Company'), 'Acme')
+    await screen.findByRole('option', { name: 'Acme' })
+    await user.selectOptions(screen.getByLabelText('Company'), 'Acme')
     await user.type(screen.getByLabelText('Job number'), 'REQ-77')
     await user.type(screen.getByLabelText('Link to the posting'), 'https://acme.com/j/77')
     await user.type(screen.getByLabelText('Date'), '2026-01-15')
@@ -57,6 +59,26 @@ describe('JobFormPage create', () => {
     })
   })
 
+  test('GivenNewCompany_WhenSaving_ThenCompanyIsCreatedAndLinkedToTheJob', async () => {
+    const api = mockApi({
+      'GET /api/users/1/companies': { body: [] },
+      'POST /api/users/1/companies': { status: 201, body: makeCompany({ name: 'Globex' }) },
+      'POST /api/users/1/jobs': { status: 201, body: makeJob({ id: 9 }) },
+      'GET /api/users/1/jobs/9': { body: makeJob({ id: 9 }) },
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs/new')
+
+    await user.selectOptions(screen.getByLabelText('Company'), '+ Add new company…')
+    await user.type(screen.getByLabelText('New company name'), 'Globex')
+    await user.type(screen.getByLabelText('Job description'), 'Build things')
+    await user.click(screen.getByRole('button', { name: 'Save job' }))
+
+    await screen.findByRole('heading', { name: 'Backend Engineer' })
+    expect(api.to('POST /api/users/1/companies')[0].body).toEqual({ name: 'Globex', contacts: [] })
+    expect(api.to('POST /api/users/1/jobs')[0].body).toMatchObject({ company: 'Globex' })
+  })
+
   test('GivenBlankDescription_WhenSaving_ThenErrorIsShownAndNothingIsSent', async () => {
     const api = mockApi({})
     const user = userEvent.setup()
@@ -66,7 +88,7 @@ describe('JobFormPage create', () => {
     await user.click(screen.getByRole('button', { name: 'Save job' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The job description is required.')
-    expect(api.calls).toHaveLength(0)
+    expect(api.calls.filter((call) => call.method !== 'GET')).toHaveLength(0)
   })
 
   test('GivenServerError_WhenSaving_ThenMessageIsShownAndFormStaysOpen', async () => {
@@ -110,6 +132,7 @@ describe('JobFormPage edit', () => {
 
   test('GivenChangedTitle_WhenSaving_ThenJobIsUpdatedWithKeptNumberAndDate', async () => {
     const api = mockApi({
+      'GET /api/users/1/companies': { body: [makeCompany({ name: 'Acme' })] },
       'GET /api/users/1/jobs/5': { body: makeJob() },
       'PUT /api/users/1/jobs/5': { body: makeJob({ title: 'Staff Engineer' }) },
     })

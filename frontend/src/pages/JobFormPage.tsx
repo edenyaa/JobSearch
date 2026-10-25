@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { messageOf } from '../api/client'
-import { jobsApi } from '../api/endpoints'
+import { companiesApi, jobsApi } from '../api/endpoints'
 import { JOB_STATUSES, STATUS_LABELS } from '../api/types'
 import type { JobInput, JobStatus } from '../api/types'
 import { useUserId } from '../auth/AuthContext'
@@ -18,6 +18,8 @@ interface FormState {
   description: string
   notes: string
 }
+
+const NEW_COMPANY = '__new__'
 
 const EMPTY: FormState = {
   title: '',
@@ -57,6 +59,23 @@ export function JobFormPage() {
   const [loading, setLoading] = useState(editing)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [companies, setCompanies] = useState<string[]>([])
+  const [addingCompany, setAddingCompany] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    companiesApi
+      .list(userId)
+      .then((list) => {
+        if (active) setCompanies(list.map((c) => c.name))
+      })
+      .catch(() => {
+        // the dropdown just stays empty; a company can still be typed in
+      })
+    return () => {
+      active = false
+    }
+  }, [userId])
 
   useEffect(() => {
     if (!editing) return
@@ -100,6 +119,10 @@ export function JobFormPage() {
     }
     setBusy(true)
     try {
+      const company = form.company.trim()
+      if (company !== '' && !companies.some((name) => name.toLowerCase() === company.toLowerCase())) {
+        await companiesApi.create(userId, { name: company, contacts: [] })
+      }
       const input = toJobInput(form)
       const saved = editing ? await jobsApi.update(userId, Number(jobId), input) : await jobsApi.create(userId, input)
       navigate(`/jobs/${saved.id}`)
@@ -122,7 +145,32 @@ export function JobFormPage() {
           </div>
           <div className="field">
             <label htmlFor="company">Company</label>
-            <input id="company" value={form.company} onChange={(e) => set('company', e.target.value)} />
+            <select
+              id="company"
+              value={addingCompany ? NEW_COMPANY : form.company}
+              onChange={(e) => {
+                const choice = e.target.value
+                setAddingCompany(choice === NEW_COMPANY)
+                set('company', choice === NEW_COMPANY ? '' : choice)
+              }}
+            >
+              <option value="">No company</option>
+              {[...new Set([...companies, ...(form.company && !addingCompany ? [form.company] : [])])].map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+              <option value={NEW_COMPANY}>+ Add new company…</option>
+            </select>
+            {addingCompany && (
+              <input
+                aria-label="New company name"
+                placeholder="Company name"
+                value={form.company}
+                onChange={(e) => set('company', e.target.value)}
+              />
+            )}
+            <small className="muted">New companies are added to your Companies page.</small>
           </div>
           <div className="field">
             <label htmlFor="jobNumber">Job number</label>
