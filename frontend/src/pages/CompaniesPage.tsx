@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { messageOf } from '../api/client'
@@ -20,6 +20,8 @@ export function CompaniesPage() {
   const [contacts, setContacts] = useState<ContactInput[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const nameRef = useRef<HTMLInputElement>(null)
 
   function reset() {
     setEditingId(null)
@@ -41,6 +43,9 @@ export function CompaniesPage() {
       })),
     )
     setError(null)
+    // the form sits above the list, so bring it into view or the click looks like it did nothing
+    formRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+    nameRef.current?.focus({ preventScroll: true })
   }
 
   function setField(index: number, field: keyof ContactInput, value: string) {
@@ -105,11 +110,11 @@ export function CompaniesPage() {
         Keep a contact at each company you apply to. A company lists every job whose company name matches it.
       </p>
 
-      <form className="card form" onSubmit={submit}>
+      <form ref={formRef} className="card form" onSubmit={submit}>
         <h2>{editingId === null ? 'Add a company' : 'Edit company'}</h2>
         <div className="field">
           <label htmlFor="company-name">Company name</label>
-          <input id="company-name" value={name} onChange={(e) => setName(e.target.value)} />
+          <input id="company-name" ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <fieldset className="field">
           <legend>People you know here</legend>
