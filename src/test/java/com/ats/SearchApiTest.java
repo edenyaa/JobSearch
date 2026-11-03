@@ -294,6 +294,52 @@ class SearchApiTest extends ApiTestSupport {
     }
 
     @Test
+    public void GivenAiLikesJobThatMentionsNoListedSkill_WhenRunning_ThenItIsSavedAndSummaryExplainsTheRun() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, "Java developer with Spring experience");
+        createSkill(account, "Java");
+        String gardening = "<p>We are hiring a junior tester to check our mobile app before every release.</p>";
+        when(boards.remotive(anyString())).thenReturn(List.of(
+                new Posting("remotive", "1", "QA Tester", "Beta", "Rehovot, Israel", "https://x.test/1", gardening),
+                new Posting("remotive", "2", "QA Tester", "Faraway", "Boston, MA", "https://x.test/2", gardening)),
+                List.of());
+        when(boards.arbeitnow()).thenReturn(List.of());
+        when(boards.openings(any(), anyString())).thenReturn(List.of());
+        when(boards.findBoard(anyString())).thenReturn(Optional.empty());
+        when(judge.judge(anyString(), any(), anyString(), any())).thenReturn(Optional.of(new Fit(75, "Junior QA role")));
+
+        mvc.perform(post(base(account) + "/run").header("Authorization", account.bearer()));
+        waitUntilFinished(account);
+
+        mvc.perform(get("/api/users/" + account.id() + "/jobs").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].company").value("Beta"));
+        mvc.perform(get(base(account)).header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$.lastRunSummary", containsString("Checked 2 openings")))
+                .andExpect(jsonPath("$.lastRunSummary", containsString("1 fit your titles and places")))
+                .andExpect(jsonPath("$.lastRunSummary", containsString("1 rated by the AI")));
+    }
+
+    @Test
+    public void GivenAiUnavailable_WhenRunning_ThenSummaryTellsSoAndCountsMissingSkills() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, "Java developer with Spring experience");
+        createSkill(account, "Java");
+        when(boards.remotive(anyString())).thenReturn(List.of(new Posting("remotive", "1", "QA Tester", "Beta",
+                "Rehovot, Israel", "https://x.test/1", "<p>Check our mobile app before every release of the product.</p>")));
+        when(boards.arbeitnow()).thenReturn(List.of());
+        when(boards.openings(any(), anyString())).thenReturn(List.of());
+        when(boards.findBoard(anyString())).thenReturn(Optional.empty());
+
+        mvc.perform(post(base(account) + "/run").header("Authorization", account.bearer()));
+        waitUntilFinished(account);
+
+        mvc.perform(get(base(account)).header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$.lastRunSummary", containsString("1 mention too few of your skills")))
+                .andExpect(jsonPath("$.lastRunSummary", containsString("The AI could not rate jobs")));
+    }
+
+    @Test
     public void GivenNoAiRating_WhenRunning_ThenFitComesFromSkillMatchWithEntryLevelAndRehovotBonus() throws Exception {
         Account account = newAccount();
         uploadCv(account, "Java developer with Spring experience");

@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -123,31 +124,46 @@ public class JobBoards {
 		return found;
 	}
 
+	/** What a source returned, and why it returned nothing when something went wrong. */
+	public record Fetched(List<Posting> postings, String error) {
+	}
+
 	/** Openings from JSearch, which gathers listings of LinkedIn, Glassdoor, Indeed and others. Needs an API key. */
-	public List<Posting> jsearch(String apiKey, String query) {
+	public Fetched jsearch(String apiKey, String query, String countryCode) {
 		String url = "https://jsearch.p.rapidapi.com/search?num_pages=1&page=1&query="
-				+ URLEncoder.encode(query, StandardCharsets.UTF_8);
+				+ URLEncoder.encode(query, StandardCharsets.UTF_8)
+				+ (countryCode.isBlank() ? "" : "&country=" + countryCode);
 		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(40))
 				.header("X-RapidAPI-Key", apiKey).header("X-RapidAPI-Host", "jsearch.p.rapidapi.com").GET().build();
 		List<Posting> found = new ArrayList<>();
 		try {
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
 			if (response.statusCode() != 200) {
-				return found;
+				return new Fetched(found, "JSearch answered HTTP " + response.statusCode() + switch (response.statusCode()) {
+					case 401, 403 -> " (the key was refused: check it, and that you subscribed to the JSearch plan)";
+					case 429 -> " (the monthly or hourly quota is used up)";
+					default -> "";
+				});
 			}
 			for (JsonNode j : mapper.readTree(response.body()).path("data")) {
-				String place = j.path("job_city").asString("") + ", " + j.path("job_country").asString("")
+				String place = j.path("job_city").asString("") + ", " + countryName(j.path("job_country").asString(""))
 						+ (j.path("job_is_remote").asBoolean(false) ? " Remote" : "");
 				found.add(new Posting("jsearch", j.path("job_id").asString(""), j.path("job_title").asString(""),
 						j.path("employer_name").asString(""), place, j.path("job_apply_link").asString(""),
 						j.path("job_description").asString("")));
 			}
+			return new Fetched(found, null);
 		} catch (IOException | JacksonException e) {
-			return found;
+			return new Fetched(found, "JSearch could not be reached or read (" + e.getClass().getSimpleName() + ")");
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
+			return new Fetched(found, "JSearch was interrupted");
 		}
-		return found;
+	}
+
+	/** "IL" becomes "Israel", so that a place filter written in words recognises it. */
+	public static String countryName(String code) {
+		return code.length() == 2 ? Locale.of("", code).getDisplayCountry(Locale.ENGLISH) : code;
 	}
 
 	/** Reads the schema.org JobPosting data that many career pages embed as JSON-LD. */

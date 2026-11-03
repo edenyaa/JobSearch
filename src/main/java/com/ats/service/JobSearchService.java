@@ -26,6 +26,8 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -77,6 +79,7 @@ public class JobSearchService {
 	private final String jsearchKey;
 	private final int jsearchQueries;
 	private volatile Instant lastAggregatorCall = Instant.EPOCH;
+	private int aggregatorTurn;
 	private final Set<Long> running = ConcurrentHashMap.newKeySet();
 	private final ExecutorService background = Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "job-search");
@@ -295,19 +298,22 @@ public class JobSearchService {
 			throw new ValidationException("Add your skills first, so openings can be matched against them.");
 		}
 		KeywordMatcher matcher = new KeywordMatcher();
+		List<String> problems = new ArrayList<>();
 
 		List<Posting> found = new ArrayList<>();
 		for (String title : s.getTitles()) {
 			found.addAll(boards.remotive(title));
 		}
 		found.addAll(boards.arbeitnow());
-		found.addAll(aggregatorOpenings(s));
+		found.addAll(aggregatorOpenings(s, problems));
 		List<WatchedCompany> watched = watchedRepo.findByUserIdOrderByNameAsc(userId);
 		Set<String> watchedNames = new HashSet<>();
 		for (WatchedCompany w : watched) {
 			watchedNames.add(PostingFilter.key(w.getName()));
 			found.addAll(boards.openings(new Board(w.getBoard(), w.getSlug()), w.getName()));
 		}
+		Map<String, Integer> bySource = new TreeMap<>();
+		found.forEach(p -> bySource.merge(p.source(), 1, Integer::sum));
 		int checked = found.size();
 		List<Posting> candidates = new ArrayList<>(found.stream().filter(p -> wanted(p, s)).toList());
 
@@ -333,6 +339,7 @@ public class JobSearchService {
 				discovered++;
 			}
 		}
+		int matchedPlaceAndTitle = candidates.size();
 
 		Set<String> knownLinks = new HashSet<>();
 		Set<String> knownNumbers = new HashSet<>();
@@ -347,9 +354,11 @@ public class JobSearchService {
 
 		record Ranked(Posting posting, String description, int keywordPercent, boolean priority) {
 		}
+		int alreadyKnown = 0;
 		List<Ranked> ranked = new ArrayList<>();
 		for (Posting p : candidates) {
 			if (p.link().isBlank() || !knownLinks.add(p.link()) || !knownNumbers.add(p.jobNumber())) {
+				alreadyKnown++;
 				continue;
 			}
 			String description = PostingFilter.text(p.description());
@@ -360,9 +369,6 @@ public class JobSearchService {
 				description = description.substring(0, MAX_DESCRIPTION);
 			}
 			int percent = matcher.match(description, cv, terms).coveragePercent();
-			if (percent < s.getMinMatchPercent()) {
-				continue;
-			}
 			ranked.add(new Ranked(p, description, percent, PostingFilter.inPriorityPlace(p, s.getPriorityLocations())));
 		}
 		// priority places first, then the best skill match, so the AI rates the most promising openings
@@ -375,6 +381,7 @@ public class JobSearchService {
 		int newCompanies = 0;
 		int rated = 0;
 		int tooWeak = 0;
+		int lowSkillMatch = 0;
 		boolean aiDown = false;
 		for (Ranked r : ranked) {
 			if (saved >= MAX_NEW_JOBS) {
@@ -390,6 +397,7 @@ public class JobSearchService {
 			int fit;
 			String note;
 			if (ai.isPresent()) {
+				// the AI reads the whole CV, so its opinion decides even when few listed skills appear in the posting
 				if (ai.get().score() < s.minFit()) {
 					tooWeak++;
 					continue;
@@ -397,6 +405,10 @@ public class JobSearchService {
 				fit = FitScore.withPriority(ai.get().score(), r.priority());
 				note = ai.get().reason();
 			} else {
+				if (r.keywordPercent() < s.getMinMatchPercent()) {
+					lowSkillMatch++;
+					continue;
+				}
 				fit = FitScore.withPriority(FitScore.fromKeywords(r.keywordPercent(), p.title()), r.priority());
 				note = "Skill match " + r.keywordPercent() + "%. Not rated by the AI.";
 			}
@@ -410,26 +422,60 @@ public class JobSearchService {
 				newCompanies++;
 			}
 		}
-		return "Checked " + checked + " openings: saved " + saved + " new job" + (saved == 1 ? "" : "s") + " ("
-				+ rated + " rated by the AI" + (tooWeak > 0 ? ", " + tooWeak + " dropped as a weak fit" : "")
-				+ "), added " + newCompanies + " new compan" + (newCompanies == 1 ? "y" : "ies")
-				+ (discovered > 0 ? ", found " + discovered + " new career page" + (discovered == 1 ? "" : "s") : "")
-				+ ".";
+		StringBuilder summary = new StringBuilder("Checked ").append(checked).append(" openings ").append(bySource)
+				.append(". ").append(matchedPlaceAndTitle).append(" fit your titles and places");
+		if (alreadyKnown > 0) {
+			summary.append(", ").append(alreadyKnown).append(" were already saved");
+		}
+		if (lowSkillMatch > 0) {
+			summary.append(", ").append(lowSkillMatch).append(" mention too few of your skills");
+		}
+		summary.append(". Saved ").append(saved).append(" new job").append(saved == 1 ? "" : "s").append(" (")
+				.append(rated).append(" rated by the AI");
+		if (tooWeak > 0) {
+			summary.append(", ").append(tooWeak).append(" dropped as a weak fit");
+		}
+		summary.append("), added ").append(newCompanies).append(" new compan").append(newCompanies == 1 ? "y" : "ies");
+		if (discovered > 0) {
+			summary.append(", found ").append(discovered).append(" new career page").append(discovered == 1 ? "" : "s");
+		}
+		summary.append('.');
+		if (rated == 0 && !ranked.isEmpty()) {
+			summary.append(" The AI could not rate jobs (is GEMINI_API_KEY set on the server?), so skill match was used.");
+		}
+		problems.forEach(problem -> summary.append(' ').append(problem).append('.'));
+		return summary.toString();
 	}
 
-	/** LinkedIn, Glassdoor and Indeed listings through JSearch; skipped without a key and at most every 6 hours. */
-	private List<Posting> aggregatorOpenings(SearchSettings s) {
-		if (!aggregatorEnabled() || Instant.now().isBefore(lastAggregatorCall.plus(AGGREGATOR_MIN_GAP))) {
+	/**
+	 * LinkedIn, Glassdoor and Indeed listings through JSearch; skipped without a key and at most every 6 hours.
+	 * Each call asks for the next of the user's titles, so the titles take turns.
+	 */
+	private List<Posting> aggregatorOpenings(SearchSettings s, List<String> problems) {
+		if (!aggregatorEnabled()) {
 			return List.of();
 		}
-		lastAggregatorCall = Instant.now();
-		String place = s.getLocations().stream()
-				.filter(l -> !List.of("remote", "worldwide", "anywhere", "emea").contains(l.toLowerCase(Locale.ROOT)))
-				.findFirst().map(l -> " in " + l).orElse("");
-		List<Posting> found = new ArrayList<>();
-		for (String title : s.getTitles().stream().limit(jsearchQueries).toList()) {
-			found.addAll(boards.jsearch(jsearchKey, title + place));
+		if (Instant.now().isBefore(lastAggregatorCall.plus(AGGREGATOR_MIN_GAP))) {
+			problems.add("JSearch was asked less than 6 hours ago, so it was skipped this time");
+			return List.of();
 		}
+		boolean israel = s.getLocations().stream().anyMatch(l -> l.equalsIgnoreCase("israel"));
+		String place = israel ? "israel" : s.getLocations().stream()
+				.filter(l -> !List.of("remote", "worldwide", "anywhere", "emea").contains(l.toLowerCase(Locale.ROOT)))
+				.findFirst().orElse("");
+		List<Posting> found = new ArrayList<>();
+		for (int i = 0; i < jsearchQueries && !s.getTitles().isEmpty(); i++) {
+			String title = s.getTitles().get(Math.floorMod(aggregatorTurn++, s.getTitles().size()));
+			String query = title + " jobs" + (place.isBlank() ? "" : " in " + place);
+			JobBoards.Fetched fetched = boards.jsearch(jsearchKey, query, israel ? "il" : "");
+			found.addAll(fetched.postings());
+			if (fetched.error() != null) {
+				problems.add(fetched.error());
+				return found;
+			}
+			problems.add("JSearch \"" + query + "\" returned " + fetched.postings().size() + " openings");
+		}
+		lastAggregatorCall = Instant.now();
 		return found;
 	}
 

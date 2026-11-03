@@ -89,6 +89,12 @@ class PostingFilterTest {
     }
 
     @Test
+    public void GivenCountryCode_WhenNaming_ThenItBecomesTheEnglishName() {
+        assertEquals("Israel", com.ats.service.JobBoards.countryName("IL"));
+        assertEquals("Israel", com.ats.service.JobBoards.countryName("Israel"));
+    }
+
+    @Test
     public void GivenCompanyName_WhenGuessingBoards_ThenLegalSuffixIsDropped() {
         assertEquals(List.of("acmesoft", "acme-soft"), PostingFilter.slugGuesses("Acme Soft Ltd."));
         assertEquals("wixcom", PostingFilter.key("Wix.com"));
