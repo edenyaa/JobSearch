@@ -98,6 +98,8 @@ class PostingFilterTest {
     public void GivenCompanyName_WhenGuessingBoards_ThenLegalSuffixIsDropped() {
         assertEquals(List.of("acmesoft", "acme-soft"), PostingFilter.slugGuesses("Acme Soft Ltd."));
         assertEquals("wixcom", PostingFilter.key("Wix.com"));
+        assertEquals(List.of("monday"), PostingFilter.slugGuesses("monday.com"));
+        assertEquals(List.of("checkpoint", "check-point"), PostingFilter.slugGuesses("Check Point"));
     }
 
 }

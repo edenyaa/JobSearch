@@ -60,6 +60,19 @@ class SearchApiTest extends ApiTestSupport {
         throw new AssertionError("The search did not finish");
     }
 
+    private void waitUntilImported(Account account) throws Exception {
+        for (int i = 0; i < 200; i++) {
+            String body = mvc.perform(get(base(account)).header("Authorization", account.bearer()))
+                    .andReturn().getResponse().getContentAsString();
+            Object status = JsonPath.read(body, "$.importStatus");
+            if (!(Boolean) JsonPath.read(body, "$.importing") && status != null) {
+                return;
+            }
+            Thread.sleep(100);
+        }
+        throw new AssertionError("The import did not finish");
+    }
+
     @Test
     public void GivenNewUser_WhenGettingSearch_ThenDefaultsAndStarterCompaniesAreCreated() throws Exception {
         Account account = newAccount();
@@ -337,6 +350,39 @@ class SearchApiTest extends ApiTestSupport {
         mvc.perform(get(base(account)).header("Authorization", account.bearer()))
                 .andExpect(jsonPath("$.lastRunSummary", containsString("1 mention too few of your skills")))
                 .andExpect(jsonPath("$.lastRunSummary", containsString("The AI could not rate jobs")));
+    }
+
+    @Test
+    public void GivenListOfCompanyNames_WhenImporting_ThenCompaniesWithCareerPagesAreAdded() throws Exception {
+        Account account = newAccount();
+        when(boards.findBoard("Alphaco")).thenReturn(Optional.of(new Board("greenhouse", "alphaco")));
+        when(boards.findBoard("Betaco")).thenReturn(Optional.of(new Board("lever", "betaco")));
+        when(boards.findBoard("Nowhere Ltd")).thenReturn(Optional.empty());
+
+        mvc.perform(json(post(base(account) + "/companies/import"), account,
+                "{\"names\":[\"Alphaco\",\" \",\"Betaco\",\"Nowhere Ltd\",\"Alphaco\"]}"))
+                .andExpect(status().isAccepted());
+        waitUntilImported(account);
+
+        mvc.perform(get(base(account)).header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$.importing").value(false))
+                .andExpect(jsonPath("$.importStatus", containsString("added 2 career pages")))
+                .andExpect(jsonPath("$.importStatus", containsString("1 have no Greenhouse, Lever or Ashby page")));
+        mvc.perform(get(base(account) + "/companies").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[*].slug", hasItems("alphaco", "betaco")));
+    }
+
+    @Test
+    public void GivenNoNames_WhenImporting_ThenTheBuiltInIsraeliListIsLookedUp() throws Exception {
+        Account account = newAccount();
+        when(boards.findBoard("Wix")).thenReturn(Optional.of(new Board("greenhouse", "wix")));
+
+        mvc.perform(post(base(account) + "/companies/import").header("Authorization", account.bearer()))
+                .andExpect(status().isAccepted());
+        waitUntilImported(account);
+
+        mvc.perform(get(base(account) + "/companies").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[*].slug", hasItem("wix")));
     }
 
     @Test

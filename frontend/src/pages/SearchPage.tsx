@@ -29,6 +29,8 @@ export function SearchPage() {
 
   const data = settings.data
   const running = data?.running ?? false
+  const importing = data?.importing ?? false
+  const [names, setNames] = useState('')
 
   useEffect(() => {
     if (data && form === null) {
@@ -46,7 +48,7 @@ export function SearchPage() {
 
   // While a search runs, keep asking for its state; when it ends the new companies are listed too.
   useEffect(() => {
-    if (running) {
+    if (running || importing) {
       const timer = setTimeout(settings.reload, POLL_MILLIS)
       wasRunning.current = true
       return () => clearTimeout(timer)
@@ -56,7 +58,7 @@ export function SearchPage() {
       companies.reload()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, data])
+  }, [running, importing, data])
 
   function set<K extends keyof SearchSettingsInput>(key: K, value: SearchSettingsInput[K]) {
     setSaved(false)
@@ -123,6 +125,24 @@ export function SearchPage() {
     } finally {
       setAdding(false)
     }
+  }
+
+  async function importNames(list: string[]) {
+    setError(null)
+    try {
+      settings.setData(await searchApi.importCompanies(userId, list))
+      setNames('')
+    } catch (e) {
+      setError(messageOf(e))
+    }
+  }
+
+  function importPasted() {
+    const list = names
+      .split(/[\n,;]+/)
+      .map((n) => n.trim())
+      .filter(Boolean)
+    if (list.length > 0) void importNames(list)
   }
 
   async function removeCompany(id: number) {
@@ -272,6 +292,29 @@ export function SearchPage() {
             {adding ? 'Looking…' : 'Add company'}
           </button>
         </form>
+        <div className="field">
+          <label htmlFor="import-names">Company names to import</label>
+          <textarea
+            id="import-names"
+            rows={3}
+            value={names}
+            placeholder="One company per line, or separated by commas"
+            onChange={(e) => setNames(e.target.value)}
+          />
+          <small className="muted">
+            Each name is looked up once, and its careers page is added when it has one on Greenhouse, Lever or Ashby. It runs
+            in the background.
+          </small>
+        </div>
+        <div className="actions">
+          <button type="button" className="btn" disabled={importing || names.trim() === ''} onClick={importPasted}>
+            Import these companies
+          </button>
+          <button type="button" className="btn" disabled={importing} onClick={() => void importNames([])}>
+            {importing ? 'Looking up careers pages…' : 'Add well-known Israeli tech companies'}
+          </button>
+        </div>
+        {data.importStatus && <p className="muted">{data.importStatus}</p>}
         {companies.loading && !companies.data && <Loading />}
         {companies.error && <ErrorMessage message={companies.error} />}
         <ul className="list">

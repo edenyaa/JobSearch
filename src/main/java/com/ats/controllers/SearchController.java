@@ -1,5 +1,6 @@
 package com.ats.controllers;
 
+import com.ats.dto.SearchDtos.ImportRequest;
 import com.ats.dto.SearchDtos.SettingsRequest;
 import com.ats.dto.SearchDtos.SettingsResponse;
 import com.ats.dto.SearchDtos.WatchRequest;
@@ -56,6 +57,14 @@ public class SearchController {
 		return WatchedResponse.from(search.watch(userId, req.company()));
 	}
 
+	/** Looks up many companies' career pages in the background; no names means the built-in Israeli list. */
+	@PostMapping("/companies/import")
+	@ResponseStatus(HttpStatus.ACCEPTED)
+	public SettingsResponse importCompanies(@PathVariable Long userId, @RequestBody(required = false) ImportRequest req) {
+		search.startImport(userId, req == null ? null : req.names());
+		return respond(userId);
+	}
+
 	@DeleteMapping("/companies/{id}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
 	public void unwatch(@PathVariable Long userId, @PathVariable Long id) {
@@ -63,7 +72,8 @@ public class SearchController {
 	}
 
 	private SettingsResponse respond(Long userId) {
-		return SettingsResponse.from(search.settings(userId), search.isRunning(userId), search.aggregatorEnabled());
+		return SettingsResponse.from(search.settings(userId), search.isRunning(userId), search.aggregatorEnabled(),
+				search.isImporting(userId), search.importStatus(userId));
 	}
 
 }

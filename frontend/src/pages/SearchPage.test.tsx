@@ -17,6 +17,8 @@ function settings(overrides: Partial<SearchSettings> = {}): SearchSettings {
     lastRunSummary: null,
     running: false,
     aggregatorEnabled: false,
+    importing: false,
+    importStatus: null,
     ...overrides,
   }
 }
@@ -104,6 +106,54 @@ describe('SearchPage', () => {
     expect(screen.getByText('junior')).toBeInTheDocument()
     expect(screen.queryByText('x')).not.toBeInTheDocument()
     expect(api.to('POST /api/users/1/search/reset')).toHaveLength(1)
+  })
+
+  test('GivenPastedNames_WhenImporting_ThenTheyAreSentAndProgressIsShown', async () => {
+    const api = mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+      'POST /api/users/1/search/companies/import': {
+        status: 202,
+        body: settings({ importing: true, importStatus: 'Looked up 1 of 2 companies, added 0 career pages so far...' }),
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+    await screen.findByLabelText('Company names to import')
+
+    await user.type(screen.getByLabelText('Company names to import'), 'Alphaco{Enter}Betaco, Gammaco')
+    await user.click(screen.getByRole('button', { name: 'Import these companies' }))
+
+    expect(await screen.findByText(/Looked up 1 of 2 companies/)).toBeInTheDocument()
+    expect(api.to('POST /api/users/1/search/companies/import')[0].body).toEqual({
+      names: ['Alphaco', 'Betaco', 'Gammaco'],
+    })
+  })
+
+  test('GivenBuiltInList_WhenImporting_ThenNoNamesAreSent', async () => {
+    const api = mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+      'POST /api/users/1/search/companies/import': { status: 202, body: settings({ importing: true }) },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+    await screen.findByLabelText('Company names to import')
+
+    await user.click(screen.getByRole('button', { name: 'Add well-known Israeli tech companies' }))
+
+    expect(await screen.findByRole('button', { name: 'Looking up careers pages…' })).toBeDisabled()
+    expect(api.to('POST /api/users/1/search/companies/import')[0].body).toEqual({ names: [] })
+  })
+
+  test('GivenFinishedImport_WhenOpening_ThenItsResultIsShown', async () => {
+    mockApi({
+      'GET /api/users/1/search': { body: settings({ importStatus: 'Looked up 100 companies: added 31 career pages.' }) },
+      'GET /api/users/1/search/companies': { body: [] },
+    })
+    renderApp('/search')
+
+    expect(await screen.findByText(/added 31 career pages/)).toBeInTheDocument()
   })
 
   test('GivenCareerPageLink_WhenAddingCompany_ThenItIsSentAndListReloads', async () => {

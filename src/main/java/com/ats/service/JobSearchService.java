@@ -52,6 +52,7 @@ public class JobSearchService {
 
 	static final int MAX_NEW_JOBS = 30;
 	static final int MAX_COMPANIES_TO_PROBE = 30;
+	static final int MAX_IMPORT = 400;
 	/** Openings the AI rates in one search, best candidates first; the rest are ranked by their skill match. */
 	static final int MAX_AI_RATINGS = 12;
 	private static final int MAX_DESCRIPTION = 9500;
@@ -81,6 +82,8 @@ public class JobSearchService {
 	private volatile Instant lastAggregatorCall = Instant.EPOCH;
 	private int aggregatorTurn;
 	private final Set<Long> running = ConcurrentHashMap.newKeySet();
+	private final Set<Long> importing = ConcurrentHashMap.newKeySet();
+	private final Map<Long, String> importStatus = new ConcurrentHashMap<>();
 	private final ExecutorService background = Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "job-search");
 		t.setDaemon(true);
@@ -246,6 +249,97 @@ public class JobSearchService {
 
 	private static String capitalize(String slug) {
 		return slug.isEmpty() ? slug : slug.substring(0, 1).toUpperCase(Locale.ROOT) + slug.substring(1);
+	}
+
+	// ---- importing many companies ---------------------------------------------------------------
+
+	/** Well-known Israeli tech companies. Each is looked up, and the ones with no readable career page are skipped. */
+	static final List<String> ISRAELI_COMPANIES = List.of("Wix", "monday.com", "Fiverr", "Check Point",
+			"CyberArk", "NICE", "Amdocs", "Playtika", "Taboola", "Outbrain", "Similarweb", "Payoneer", "JFrog",
+			"SentinelOne", "Cato Networks", "Snyk", "Wiz", "Armis", "Transmit Security", "Riskified", "Lemonade",
+			"HiBob", "Papaya Global", "Rapyd", "Pagaya", "Melio", "Lightricks", "Fireblocks", "Torq", "AppsFlyer",
+			"Gong", "Cloudinary", "Forter", "Sisense", "Yotpo", "Zesty", "Aqua Security", "Orca Security", "Axonius",
+			"Cybereason", "Varonis", "Imperva", "Radware", "Kaltura", "Perion", "Nayax", "Tufin", "Cellebrite",
+			"SolarEdge", "Mobileye", "Moon Active", "Plarium", "Lusha", "Pecan AI", "Hippo", "Fundbox", "Tipalti",
+			"Nanox", "Verbit", "Placer.ai", "Redis", "Elementor", "ironSource", "Unity", "Vimeo", "Bringg", "Nuvei",
+			"Global-e", "Digital Turbine", "Tabnine", "Run:ai", "Deci", "AI21 Labs", "Anyword", "Quantum Machines",
+			"Classiq", "Bria", "Hailo", "NeuroBlade", "Augury", "Navan", "Cyera", "Island", "Dazz", "Jit",
+			"Legit Security", "Zafran", "Upwind", "Salt Security", "Pentera", "Cymulate", "XM Cyber", "Checkmarx",
+			"Sapiens", "Cognyte", "Verint", "Palo Alto Networks", "Kornit Digital", "Next Insurance", "Lendbuzz",
+			"Bluevine", "Rivery", "Atera", "Gloat", "Honeybook", "Skai", "Optimove", "Zoominfo", "Walkme", "Lightrun",
+			"Komodor", "Granulate", "Vayyar", "Innoviz", "Arbe Robotics", "Otonomo", "Nexar", "Cortica",
+			"Tailor Brands", "Kryon", "Dynamic Yield", "Voyantis", "Bizzabo", "Deel", "Ultima Genomics", "Mend",
+			"Cycode", "Wing Security", "Silverfort", "Hunters", "Aidoc", "Zebra Medical", "Itamar Medical", "Medigus",
+			"Camtek", "Tower Semiconductor", "Ceva", "Valens", "Cyren");
+
+	public boolean isImporting(Long userId) {
+		return importing.contains(userId);
+	}
+
+	public String importStatus(Long userId) {
+		return importStatus.get(userId);
+	}
+
+	/**
+	 * Looks up the career page of every given company name (the built-in Israeli tech list when none is given) in
+	 * the background and adds the ones found to the searched companies.
+	 */
+	public void startImport(Long userId, List<String> names) {
+		settings(userId);
+		List<String> wanted = clean(names).stream().limit(MAX_IMPORT).toList();
+		List<String> list = wanted.isEmpty() ? ISRAELI_COMPANIES.stream().distinct().toList() : wanted;
+		if (importing.add(userId)) {
+			importStatus.put(userId, "Looking up " + list.size() + " companies...");
+			background.execute(() -> runImport(userId, list));
+		}
+	}
+
+	private void runImport(Long userId, List<String> names) {
+		int added = 0;
+		int without = 0;
+		int known = 0;
+		try {
+			Set<String> watchedKeys = new HashSet<>();
+			Set<String> boardKeys = new HashSet<>();
+			for (WatchedCompany w : watchedRepo.findByUserIdOrderByNameAsc(userId)) {
+				watchedKeys.add(PostingFilter.key(w.getName()));
+				boardKeys.add(w.getBoard() + "/" + w.getSlug());
+			}
+			int done = 0;
+			for (String name : names) {
+				done++;
+				importStatus.put(userId, "Looked up " + done + " of " + names.size() + " companies, added " + added
+						+ " career pages so far...");
+				if (watchedKeys.contains(PostingFilter.key(name))) {
+					known++;
+					continue;
+				}
+				Optional<Board> board = boards.findBoard(name);
+				if (board.isEmpty()) {
+					without++;
+					continue;
+				}
+				if (!boardKeys.add(board.get().kind() + "/" + board.get().slug())) {
+					known++;
+					continue;
+				}
+				try {
+					addWatched(userId, name, board.get());
+					watchedKeys.add(PostingFilter.key(name));
+					added++;
+				} catch (ConflictException e) {
+					known++;
+				}
+			}
+			importStatus.put(userId, "Looked up " + names.size() + " companies: added " + added + " career pages"
+					+ (known > 0 ? ", " + known + " were already in the list" : "") + ", " + without
+					+ " have no Greenhouse, Lever or Ashby page that can be read.");
+		} catch (RuntimeException e) {
+			log.warn("Company import failed for user {}", userId, e);
+			importStatus.put(userId, "The import stopped: " + e.getMessage() + " (" + added + " added so far).");
+		} finally {
+			importing.remove(userId);
+		}
 	}
 
 	// ---- running -------------------------------------------------------------------------------

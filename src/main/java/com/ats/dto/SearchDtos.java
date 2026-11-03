@@ -32,14 +32,21 @@ public final class SearchDtos {
 			Instant lastRunAt,
 			String lastRunSummary,
 			boolean running,
-			boolean aggregatorEnabled) {
+			boolean aggregatorEnabled,
+			boolean importing,
+			String importStatus) {
 
-		public static SettingsResponse from(SearchSettings s, boolean running, boolean aggregatorEnabled) {
+		public static SettingsResponse from(SearchSettings s, boolean running, boolean aggregatorEnabled, boolean importing,
+				String importStatus) {
 			return new SettingsResponse(List.copyOf(s.getTitles()), List.copyOf(s.getExcludedTitles()),
 					List.copyOf(s.getLocations()), List.copyOf(s.getPriorityLocations()), s.getMinMatchPercent(),
 					s.minFit(), s.isDaily(), s.getLastRunAt(),
-					s.getLastRunSummary(), running, aggregatorEnabled);
+					s.getLastRunSummary(), running, aggregatorEnabled, importing, importStatus);
 		}
+	}
+
+	/** Company names to look up; empty means the built-in list of Israeli tech companies. */
+	public record ImportRequest(List<String> names) {
 	}
 
 	/** A company name, or the link of its Greenhouse or Lever career page. */

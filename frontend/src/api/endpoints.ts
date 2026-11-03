@@ -89,5 +89,7 @@ export const searchApi = {
   companies: (userId: number) => request<SearchedCompany[]>('GET', `/users/${userId}/search/companies`),
   addCompany: (userId: number, company: string) =>
     request<SearchedCompany>('POST', `/users/${userId}/search/companies`, { company }),
+  importCompanies: (userId: number, names: string[]) =>
+    request<SearchSettings>('POST', `/users/${userId}/search/companies/import`, { names }),
   removeCompany: (userId: number, id: number) => request<void>('DELETE', `/users/${userId}/search/companies/${id}`),
 }

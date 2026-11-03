@@ -134,9 +134,12 @@ export interface SearchSettings {
   lastRunSummary: string | null
   running: boolean
   aggregatorEnabled: boolean
+  importing: boolean
+  importStatus: string | null
 }
 
-export type SearchSettingsInput = Omit<SearchSettings, 'lastRunAt' | 'lastRunSummary' | 'running' | 'aggregatorEnabled'>
+export type SearchSettingsInput = Omit<SearchSettings, 'lastRunAt' | 'lastRunSummary' | 'running' | 'aggregatorEnabled' | 'importing' | 'importStatus'
+>
 
 export interface SearchedCompany {
   id: number

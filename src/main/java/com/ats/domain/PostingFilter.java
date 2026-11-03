@@ -95,6 +95,7 @@ public final class PostingFilter {
 	/** Likely career-board names for a company: "Acme Corp Ltd" gives "acmecorp" and "acme-corp". */
 	public static List<String> slugGuesses(String company) {
 		String base = company.toLowerCase(Locale.ROOT)
+				.replaceAll("\\.(com|io|ai|co|app|net)\\b", "")
 				.replaceAll("\\b(inc|ltd|llc|gmbh|corp|co|limited)\\b\\.?", "")
 				.replaceAll("[^a-z0-9 ]", "").strip();
 		return List.of(base.replace(" ", ""), base.replace(" ", "-")).stream().filter(s -> !s.isEmpty()).distinct()
