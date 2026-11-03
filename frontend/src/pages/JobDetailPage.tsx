@@ -119,7 +119,7 @@ export function JobDetailPage() {
         <div>
           <h1>{job.title ?? 'Untitled job'}</h1>
           <p className="muted">
-            {[job.company, `#${job.jobNumber}`, job.appliedDate].filter(Boolean).join(' · ')}
+            {[job.company, job.location, `#${job.jobNumber}`, job.appliedDate].filter(Boolean).join(' · ')}
             {job.link && (
               <>
                 {' · '}
@@ -139,6 +139,15 @@ export function JobDetailPage() {
       </div>
 
       <ErrorMessage message={actionError} />
+
+      {job.fitScore !== null && (
+        <section className="card" aria-label="Fit with your CV">
+          <strong>
+            Fit with your CV: {job.fitScore}%{job.priorityPlace ? ' · in a priority place' : ''}
+          </strong>
+          {job.fitNote && <p className="muted">{job.fitNote}</p>}
+        </section>
+      )}
 
       <section className="card">
         <div className="field inline">

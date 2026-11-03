@@ -15,7 +15,9 @@ public final class SearchDtos {
 			List<String> titles,
 			List<String> excludedTitles,
 			List<String> locations,
+			List<String> priorityLocations,
 			int minMatchPercent,
+			int minFitPercent,
 			boolean daily) {
 	}
 
@@ -23,16 +25,20 @@ public final class SearchDtos {
 			List<String> titles,
 			List<String> excludedTitles,
 			List<String> locations,
+			List<String> priorityLocations,
 			int minMatchPercent,
+			int minFitPercent,
 			boolean daily,
 			Instant lastRunAt,
 			String lastRunSummary,
-			boolean running) {
+			boolean running,
+			boolean aggregatorEnabled) {
 
-		public static SettingsResponse from(SearchSettings s, boolean running) {
+		public static SettingsResponse from(SearchSettings s, boolean running, boolean aggregatorEnabled) {
 			return new SettingsResponse(List.copyOf(s.getTitles()), List.copyOf(s.getExcludedTitles()),
-					List.copyOf(s.getLocations()), s.getMinMatchPercent(), s.isDaily(), s.getLastRunAt(),
-					s.getLastRunSummary(), running);
+					List.copyOf(s.getLocations()), List.copyOf(s.getPriorityLocations()), s.getMinMatchPercent(),
+					s.minFit(), s.isDaily(), s.getLastRunAt(),
+					s.getLastRunSummary(), running, aggregatorEnabled);
 		}
 	}
 

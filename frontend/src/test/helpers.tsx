@@ -89,6 +89,10 @@ export function makeJob(overrides: Partial<Job> = {}): Job {
     notes: null,
     tailoredResumeFileName: null,
     hasTailoredResume: false,
+    location: null,
+    fitScore: null,
+    fitNote: null,
+    priorityPlace: false,
     ...overrides,
   }
 }

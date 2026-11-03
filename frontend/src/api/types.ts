@@ -105,6 +105,10 @@ export interface Job {
   notes: string | null
   tailoredResumeFileName: string | null
   hasTailoredResume: boolean
+  location: string | null
+  fitScore: number | null
+  fitNote: string | null
+  priorityPlace: boolean
 }
 
 export interface JobInput {
@@ -122,14 +126,17 @@ export interface SearchSettings {
   titles: string[]
   excludedTitles: string[]
   locations: string[]
+  priorityLocations: string[]
   minMatchPercent: number
+  minFitPercent: number
   daily: boolean
   lastRunAt: string | null
   lastRunSummary: string | null
   running: boolean
+  aggregatorEnabled: boolean
 }
 
-export type SearchSettingsInput = Omit<SearchSettings, 'lastRunAt' | 'lastRunSummary' | 'running'>
+export type SearchSettingsInput = Omit<SearchSettings, 'lastRunAt' | 'lastRunSummary' | 'running' | 'aggregatorEnabled'>
 
 export interface SearchedCompany {
   id: number

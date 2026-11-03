@@ -13,6 +13,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -24,6 +26,12 @@ public class JobBoards {
 
 	public static final String GREENHOUSE = "greenhouse";
 	public static final String LEVER = "lever";
+	public static final String ASHBY = "ashby";
+	/** Any career page that publishes its openings as schema.org JobPosting data; the slug is the page address. */
+	public static final String PAGE = "page";
+
+	private static final Pattern JSON_LD = Pattern.compile(
+			"<script[^>]*type=[\"']application/ld\\+json[\"'][^>]*>(.*?)</script>", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
 
 	public record Board(String kind, String slug) {
 	}
@@ -62,7 +70,7 @@ public class JobBoards {
 	/** Finds the company's career board on Greenhouse or Lever, trying each likely name. */
 	public Optional<Board> findBoard(String company) {
 		for (String slug : PostingFilter.slugGuesses(company)) {
-			for (String kind : List.of(GREENHOUSE, LEVER)) {
+			for (String kind : List.of(GREENHOUSE, LEVER, ASHBY)) {
 				if (exists(new Board(kind, slug))) {
 					return Optional.of(new Board(kind, slug));
 				}
@@ -72,9 +80,12 @@ public class JobBoards {
 	}
 
 	public boolean exists(Board board) {
-		return GREENHOUSE.equals(board.kind())
-				? get("https://boards-api.greenhouse.io/v1/boards/" + board.slug() + "/jobs").isPresent()
-				: get("https://api.lever.co/v0/postings/" + board.slug() + "?mode=json").isPresent();
+		return switch (board.kind()) {
+			case GREENHOUSE -> get("https://boards-api.greenhouse.io/v1/boards/" + board.slug() + "/jobs").isPresent();
+			case ASHBY -> get("https://api.ashbyhq.com/posting-api/job-board/" + board.slug()).isPresent();
+			case PAGE -> !openings(board, "").isEmpty();
+			default -> get("https://api.lever.co/v0/postings/" + board.slug() + "?mode=json").isPresent();
+		};
 	}
 
 	public List<Posting> openings(Board board, String company) {
@@ -87,6 +98,19 @@ public class JobBoards {
 						j.path("location").path("name").asString(""), j.path("absolute_url").asString(""),
 						j.path("content").asString("")));
 			}
+		} else if (ASHBY.equals(board.kind())) {
+			Optional<JsonNode> root = get("https://api.ashbyhq.com/posting-api/job-board/" + board.slug());
+			for (JsonNode j : root.map(n -> n.path("jobs")).orElse(mapper.createArrayNode())) {
+				if (!j.path("isListed").asBoolean(true)) {
+					continue;
+				}
+				String place = j.path("isRemote").asBoolean(false) ? j.path("location").asString("") + " Remote"
+						: j.path("location").asString("");
+				found.add(new Posting(ASHBY, j.path("id").asString(""), j.path("title").asString(""), company, place,
+						j.path("jobUrl").asString(""), j.path("descriptionHtml").asString("")));
+			}
+		} else if (PAGE.equals(board.kind())) {
+			found.addAll(parseJobPostings(getText(board.slug()).orElse(""), board.slug(), company));
 		} else {
 			Optional<JsonNode> root = get("https://api.lever.co/v0/postings/" + board.slug() + "?mode=json");
 			for (JsonNode j : root.orElse(mapper.createArrayNode())) {
@@ -97,6 +121,101 @@ public class JobBoards {
 			}
 		}
 		return found;
+	}
+
+	/** Openings from JSearch, which gathers listings of LinkedIn, Glassdoor, Indeed and others. Needs an API key. */
+	public List<Posting> jsearch(String apiKey, String query) {
+		String url = "https://jsearch.p.rapidapi.com/search?num_pages=1&page=1&query="
+				+ URLEncoder.encode(query, StandardCharsets.UTF_8);
+		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(40))
+				.header("X-RapidAPI-Key", apiKey).header("X-RapidAPI-Host", "jsearch.p.rapidapi.com").GET().build();
+		List<Posting> found = new ArrayList<>();
+		try {
+			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+			if (response.statusCode() != 200) {
+				return found;
+			}
+			for (JsonNode j : mapper.readTree(response.body()).path("data")) {
+				String place = j.path("job_city").asString("") + ", " + j.path("job_country").asString("")
+						+ (j.path("job_is_remote").asBoolean(false) ? " Remote" : "");
+				found.add(new Posting("jsearch", j.path("job_id").asString(""), j.path("job_title").asString(""),
+						j.path("employer_name").asString(""), place, j.path("job_apply_link").asString(""),
+						j.path("job_description").asString("")));
+			}
+		} catch (IOException | JacksonException e) {
+			return found;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+		return found;
+	}
+
+	/** Reads the schema.org JobPosting data that many career pages embed as JSON-LD. */
+	public List<Posting> parseJobPostings(String html, String pageUrl, String company) {
+		List<Posting> found = new ArrayList<>();
+		Matcher m = JSON_LD.matcher(html);
+		while (m.find()) {
+			try {
+				collect(mapper.readTree(m.group(1).strip()), pageUrl, company, found);
+			} catch (JacksonException e) {
+				// a malformed block is skipped
+			}
+		}
+		return found;
+	}
+
+	private void collect(JsonNode node, String pageUrl, String company, List<Posting> found) {
+		if (node.isArray()) {
+			node.forEach(n -> collect(n, pageUrl, company, found));
+			return;
+		}
+		if (!node.isObject()) {
+			return;
+		}
+		JsonNode type = node.path("@type");
+		boolean isJob = type.isArray() ? type.toString().contains("JobPosting") : "JobPosting".equals(type.asString(""));
+		if (isJob) {
+			String title = node.path("title").asString("");
+			String link = node.path("url").asString(pageUrl);
+			String id = node.path("identifier").isObject() ? node.path("identifier").path("value").asString("")
+					: node.path("identifier").asString("");
+			found.add(new Posting("page", id.isBlank() ? Integer.toHexString(link.hashCode()) : id, title,
+					company.isBlank() ? node.path("hiringOrganization").path("name").asString("") : company,
+					placeOf(node), link.isBlank() ? pageUrl : link, node.path("description").asString("")));
+			return;
+		}
+		collect(node.path("@graph"), pageUrl, company, found);
+		collect(node.path("itemListElement"), pageUrl, company, found);
+		collect(node.path("item"), pageUrl, company, found);
+	}
+
+	private static String placeOf(JsonNode job) {
+		StringBuilder place = new StringBuilder();
+		JsonNode locations = job.path("jobLocation");
+		for (JsonNode location : locations.isArray() ? locations : List.of(locations)) {
+			JsonNode address = location.path("address");
+			JsonNode country = address.path("addressCountry");
+			place.append(address.path("addressLocality").asString("")).append(' ')
+					.append(country.isObject() ? country.path("name").asString("") : country.asString("")).append(' ');
+		}
+		if ("TELECOMMUTE".equals(job.path("jobLocationType").asString(""))) {
+			place.append("Remote");
+		}
+		return place.toString().strip();
+	}
+
+	private Optional<String> getText(String url) {
+		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(30))
+				.header("User-Agent", "Mozilla/5.0 (compatible; auto-ats-job-search)").GET().build();
+		try {
+			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+			return response.statusCode() == 200 ? Optional.of(response.body()) : Optional.empty();
+		} catch (IOException | IllegalArgumentException e) {
+			return Optional.empty();
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return Optional.empty();
+		}
 	}
 
 	private Optional<JsonNode> get(String url) {

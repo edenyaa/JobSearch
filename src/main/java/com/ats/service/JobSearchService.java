@@ -1,5 +1,6 @@
 package com.ats.service;
 
+import com.ats.domain.FitScore;
 import com.ats.domain.KeywordMatcher;
 import com.ats.domain.Job;
 import com.ats.domain.JobStatus;
@@ -12,11 +13,15 @@ import com.ats.dto.JobDtos.JobRequest;
 import com.ats.dto.SearchDtos.SettingsRequest;
 import com.ats.repository.SearchSettingsRepository;
 import com.ats.repository.WatchedCompanyRepository;
+import com.ats.service.FitJudge.Fit;
 import com.ats.service.JobBoards.Board;
 import jakarta.annotation.PreDestroy;
+import java.net.URI;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -29,6 +34,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -44,10 +50,16 @@ public class JobSearchService {
 
 	static final int MAX_NEW_JOBS = 30;
 	static final int MAX_COMPANIES_TO_PROBE = 30;
+	/** Openings the AI rates in one search, best candidates first; the rest are ranked by their skill match. */
+	static final int MAX_AI_RATINGS = 12;
 	private static final int MAX_DESCRIPTION = 9500;
 
 	private static final Pattern GREENHOUSE_URL = Pattern
 			.compile("greenhouse\\.io/(?:embed/job_board\\?for=)?([A-Za-z0-9_-]+)");
+	private static final Pattern ASHBY_URL = Pattern.compile("jobs\\.ashbyhq\\.com/([A-Za-z0-9_.-]+)");
+	private static final Duration AGGREGATOR_MIN_GAP = Duration.ofHours(6);
+	/** The columns hold 255 characters, which a career page address must fit in. */
+	private static final int MAX_ADDRESS = 255;
 	private static final Pattern LEVER_URL = Pattern.compile("jobs\\.lever\\.co/([A-Za-z0-9_-]+)");
 
 	/** Israeli companies whose Greenhouse career pages are searched until the user changes the list. */
@@ -61,6 +73,10 @@ public class JobSearchService {
 	private final CompanyService companies;
 	private final SkillService skills;
 	private final UserService users;
+	private final FitJudge judge;
+	private final String jsearchKey;
+	private final int jsearchQueries;
+	private volatile Instant lastAggregatorCall = Instant.EPOCH;
 	private final Set<Long> running = ConcurrentHashMap.newKeySet();
 	private final ExecutorService background = Executors.newSingleThreadExecutor(r -> {
 		Thread t = new Thread(r, "job-search");
@@ -69,7 +85,13 @@ public class JobSearchService {
 	});
 
 	public JobSearchService(SearchSettingsRepository settingsRepo, WatchedCompanyRepository watchedRepo,
-			JobBoards boards, JobService jobs, CompanyService companies, SkillService skills, UserService users) {
+			JobBoards boards, JobService jobs, CompanyService companies, SkillService skills, UserService users,
+			FitJudge judge,
+			@Value("${search.jsearch.api-key:}") String jsearchKey,
+			@Value("${search.jsearch.max-queries:1}") int jsearchQueries) {
+		this.judge = judge;
+		this.jsearchKey = jsearchKey;
+		this.jsearchQueries = jsearchQueries;
 		this.settingsRepo = settingsRepo;
 		this.watchedRepo = watchedRepo;
 		this.boards = boards;
@@ -93,10 +115,7 @@ public class JobSearchService {
 	private SearchSettings createDefaults(Long userId) {
 		SearchSettings s = new SearchSettings();
 		s.setUser(users.get(userId));
-		s.setTitles(new ArrayList<>(List.of("software engineer", "developer", "backend", "full stack", "java")));
-		s.setExcludedTitles(new ArrayList<>(
-				List.of("senior", "staff", "principal", "lead", "manager", "director", "head of", "intern")));
-		s.setLocations(new ArrayList<>(List.of("israel", "tel aviv", "remote", "worldwide", "anywhere", "emea")));
+		applyRecommended(s);
 		s = settingsRepo.save(s);
 		for (String slug : STARTER_COMPANIES) {
 			WatchedCompany w = new WatchedCompany();
@@ -109,19 +128,45 @@ public class JobSearchService {
 		return s;
 	}
 
+	/** QA, development, AI backend and prompting roles, junior, student or intern level, in Israel with Rehovot first. */
+	private static void applyRecommended(SearchSettings s) {
+		s.setTitles(new ArrayList<>(List.of("qa", "automation", "developer", "software engineer", "backend", "ai",
+				"machine learning", "llm", "prompt", "junior", "student", "intern", "trainee", "graduate", "entry level",
+				"full stack")));
+		s.setExcludedTitles(new ArrayList<>(
+				List.of("senior", "staff", "principal", "lead", "manager", "director", "head of", "vp", "architect")));
+		s.setLocations(new ArrayList<>(List.of("israel", "rehovot", "rechovot", "tel aviv", "ramat gan", "herzliya",
+				"petah tikva", "petach tikva", "holon", "rishon", "ness ziona", "nes ziona", "modiin", "jerusalem", "haifa",
+				"netanya", "raanana", "ra'anana", "kfar saba", "hod hasharon", "yokneam", "beer sheva", "be'er sheva",
+				"givatayim", "bnei brak", "lod", "ramla", "yavne", "ashdod")));
+		s.setPriorityLocations(new ArrayList<>(List.of("rehovot", "rechovot")));
+		s.setMinMatchPercent(20);
+		s.setMinFitPercent(40);
+	}
+
+	/** Puts the recommended titles, places and thresholds back; searched companies and the daily switch stay. */
+	public SearchSettings resetToRecommended(Long userId) {
+		SearchSettings s = settings(userId);
+		applyRecommended(s);
+		return settingsRepo.save(s);
+	}
+
 	public SearchSettings update(Long userId, SettingsRequest req) {
 		List<String> titles = clean(req.titles());
 		if (titles.isEmpty()) {
 			throw new ValidationException("Add at least one job title to search for.");
 		}
-		if (req.minMatchPercent() < 0 || req.minMatchPercent() > 100) {
-			throw new ValidationException("The minimum match must be between 0 and 100.");
+		if (req.minMatchPercent() < 0 || req.minMatchPercent() > 100 || req.minFitPercent() < 0
+				|| req.minFitPercent() > 100) {
+			throw new ValidationException("The minimum percentages must be between 0 and 100.");
 		}
 		SearchSettings s = settings(userId);
 		s.setTitles(titles);
 		s.setExcludedTitles(clean(req.excludedTitles()));
 		s.setLocations(clean(req.locations()));
+		s.setPriorityLocations(clean(req.priorityLocations()));
 		s.setMinMatchPercent(req.minMatchPercent());
+		s.setMinFitPercent(req.minFitPercent());
 		s.setDaily(req.daily());
 		return settingsRepo.save(s);
 	}
@@ -146,19 +191,32 @@ public class JobSearchService {
 		String name;
 		Matcher greenhouse = GREENHOUSE_URL.matcher(text);
 		Matcher lever = LEVER_URL.matcher(text);
+		Matcher ashby = ASHBY_URL.matcher(text);
 		if (greenhouse.find()) {
 			board = new Board(JobBoards.GREENHOUSE, greenhouse.group(1));
 			name = capitalize(board.slug());
 		} else if (lever.find()) {
 			board = new Board(JobBoards.LEVER, lever.group(1));
 			name = capitalize(board.slug());
+		} else if (ashby.find()) {
+			board = new Board(JobBoards.ASHBY, ashby.group(1));
+			name = capitalize(board.slug());
+		} else if (text.matches("(?i)https?://\\S+")) {
+			if (text.length() > MAX_ADDRESS) {
+				throw new ValidationException("That link is too long. Use the address of the careers page itself.");
+			}
+			board = new Board(JobBoards.PAGE, text);
+			name = capitalize(URI.create(text).getHost().replaceFirst("^(www|careers|jobs)\\.", "").split("\\.")[0]);
 		} else {
-			board = boards.findBoard(text).orElseThrow(() -> new ValidationException("No Greenhouse or Lever career page "
-					+ "found for " + text + ". Paste the link of its career page instead."));
+			board = boards.findBoard(text).orElseThrow(() -> new ValidationException("No Greenhouse, Lever or Ashby "
+					+ "career page found for " + text + ". Paste the link of its careers page instead."));
 			name = text;
 		}
 		if (!boards.exists(board)) {
-			throw new ValidationException("That career page could not be opened.");
+			throw new ValidationException(JobBoards.PAGE.equals(board.kind())
+					? "No job postings were found on that page. It must list its openings in schema.org JobPosting "
+							+ "data, which pages built only with JavaScript often do not."
+					: "That career page could not be opened.");
 		}
 		settings(userId);
 		WatchedCompany w = addWatched(userId, name, board);
@@ -243,6 +301,7 @@ public class JobSearchService {
 			found.addAll(boards.remotive(title));
 		}
 		found.addAll(boards.arbeitnow());
+		found.addAll(aggregatorOpenings(s));
 		List<WatchedCompany> watched = watchedRepo.findByUserIdOrderByNameAsc(userId);
 		Set<String> watchedNames = new HashSet<>();
 		for (WatchedCompany w : watched) {
@@ -286,12 +345,10 @@ public class JobSearchService {
 		Set<String> knownCompanies = new HashSet<>();
 		companies.list(userId).forEach(c -> knownCompanies.add(PostingFilter.key(c.getName())));
 
-		int saved = 0;
-		int newCompanies = 0;
+		record Ranked(Posting posting, String description, int keywordPercent, boolean priority) {
+		}
+		List<Ranked> ranked = new ArrayList<>();
 		for (Posting p : candidates) {
-			if (saved >= MAX_NEW_JOBS) {
-				break;
-			}
 			if (p.link().isBlank() || !knownLinks.add(p.link()) || !knownNumbers.add(p.jobNumber())) {
 				continue;
 			}
@@ -306,19 +363,78 @@ public class JobSearchService {
 			if (percent < s.getMinMatchPercent()) {
 				continue;
 			}
-			jobs.create(userId, new JobRequest(p.jobNumber(), shorten(p.title()), shorten(p.company()), description,
-					p.link(), LocalDate.now(), JobStatus.SAVED,
-					"Found by the job search via " + p.source() + ". Keyword match: " + percent + "%."));
+			ranked.add(new Ranked(p, description, percent, PostingFilter.inPriorityPlace(p, s.getPriorityLocations())));
+		}
+		// priority places first, then the best skill match, so the AI rates the most promising openings
+		ranked.sort((a, b) -> {
+			int byPlace = Boolean.compare(b.priority(), a.priority());
+			return byPlace != 0 ? byPlace : Integer.compare(b.keywordPercent(), a.keywordPercent());
+		});
+
+		int saved = 0;
+		int newCompanies = 0;
+		int rated = 0;
+		int tooWeak = 0;
+		boolean aiDown = false;
+		for (Ranked r : ranked) {
+			if (saved >= MAX_NEW_JOBS) {
+				break;
+			}
+			Posting p = r.posting();
+			Optional<Fit> ai = Optional.empty();
+			if (rated < MAX_AI_RATINGS && !aiDown) {
+				ai = judge.judge(cv, p, r.description(), s.getTitles());
+				aiDown = ai.isEmpty();
+				rated += ai.isPresent() ? 1 : 0;
+			}
+			int fit;
+			String note;
+			if (ai.isPresent()) {
+				if (ai.get().score() < s.minFit()) {
+					tooWeak++;
+					continue;
+				}
+				fit = FitScore.withPriority(ai.get().score(), r.priority());
+				note = ai.get().reason();
+			} else {
+				fit = FitScore.withPriority(FitScore.fromKeywords(r.keywordPercent(), p.title()), r.priority());
+				note = "Skill match " + r.keywordPercent() + "%. Not rated by the AI.";
+			}
+			Job job = jobs.create(userId, new JobRequest(p.jobNumber(), shorten(p.title()), shorten(p.company()),
+					r.description(), p.link(), LocalDate.now(), JobStatus.SAVED,
+					"Found by the job search via " + p.source() + ". Keyword match: " + r.keywordPercent() + "%."));
+			jobs.annotate(userId, job.getId(), p.location(), fit, note, r.priority());
 			saved++;
 			if (!p.company().isBlank() && knownCompanies.add(PostingFilter.key(p.company()))) {
 				addToCompanies(userId, p.company());
 				newCompanies++;
 			}
 		}
-		return "Checked " + checked + " openings: saved " + saved + " new job" + (saved == 1 ? "" : "s") + ", added "
-				+ newCompanies + " new compan" + (newCompanies == 1 ? "y" : "ies") + (discovered > 0
-						? ", found " + discovered + " new career page" + (discovered == 1 ? "" : "s") : "")
+		return "Checked " + checked + " openings: saved " + saved + " new job" + (saved == 1 ? "" : "s") + " ("
+				+ rated + " rated by the AI" + (tooWeak > 0 ? ", " + tooWeak + " dropped as a weak fit" : "")
+				+ "), added " + newCompanies + " new compan" + (newCompanies == 1 ? "y" : "ies")
+				+ (discovered > 0 ? ", found " + discovered + " new career page" + (discovered == 1 ? "" : "s") : "")
 				+ ".";
+	}
+
+	/** LinkedIn, Glassdoor and Indeed listings through JSearch; skipped without a key and at most every 6 hours. */
+	private List<Posting> aggregatorOpenings(SearchSettings s) {
+		if (!aggregatorEnabled() || Instant.now().isBefore(lastAggregatorCall.plus(AGGREGATOR_MIN_GAP))) {
+			return List.of();
+		}
+		lastAggregatorCall = Instant.now();
+		String place = s.getLocations().stream()
+				.filter(l -> !List.of("remote", "worldwide", "anywhere", "emea").contains(l.toLowerCase(Locale.ROOT)))
+				.findFirst().map(l -> " in " + l).orElse("");
+		List<Posting> found = new ArrayList<>();
+		for (String title : s.getTitles().stream().limit(jsearchQueries).toList()) {
+			found.addAll(boards.jsearch(jsearchKey, title + place));
+		}
+		return found;
+	}
+
+	public boolean aggregatorEnabled() {
+		return jsearchKey != null && !jsearchKey.isBlank();
 	}
 
 	private static boolean wanted(Posting p, SearchSettings s) {

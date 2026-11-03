@@ -9,11 +9,14 @@ function settings(overrides: Partial<SearchSettings> = {}): SearchSettings {
     titles: ['developer'],
     excludedTitles: ['senior'],
     locations: ['israel'],
+    priorityLocations: ['rehovot'],
     minMatchPercent: 20,
+    minFitPercent: 40,
     daily: false,
     lastRunAt: null,
     lastRunSummary: null,
     running: false,
+    aggregatorEnabled: false,
     ...overrides,
   }
 }
@@ -35,6 +38,26 @@ describe('SearchPage', () => {
     expect(screen.getByText(/Saved 3\./)).toBeInTheDocument()
   })
 
+  test('GivenAggregatorKey_WhenOpening_ThenLinkedinGlassdoorSourceIsShownAsOn', async () => {
+    mockApi({
+      'GET /api/users/1/search': { body: settings({ aggregatorEnabled: true }) },
+      'GET /api/users/1/search/companies': { body: [] },
+    })
+    renderApp('/search')
+
+    expect(await screen.findByText(/LinkedIn, Glassdoor and Indeed listings are included/)).toBeInTheDocument()
+  })
+
+  test('GivenNoAggregatorKey_WhenOpening_ThenHowToTurnItOnIsShown', async () => {
+    mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+    })
+    renderApp('/search')
+
+    expect(await screen.findByText(/JSEARCH_API_KEY/)).toBeInTheDocument()
+  })
+
   test('GivenChangedSettings_WhenRunningNow_ThenTheyAreSavedFirstAndTheSearchStarts', async () => {
     const api = mockApi({
       'GET /api/users/1/search': { body: settings() },
@@ -52,6 +75,35 @@ describe('SearchPage', () => {
     expect(await screen.findByText('Searching…', { selector: 'strong' })).toBeInTheDocument()
     expect(api.to('PUT /api/users/1/search')[0].body).toMatchObject({ daily: true, titles: ['developer'] })
     expect(api.to('POST /api/users/1/search/run')).toHaveLength(1)
+  })
+
+  test('GivenSettings_WhenOpening_ThenPriorityPlacesAndMinimumFitAreShown', async () => {
+    mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+    })
+    renderApp('/search')
+
+    expect(await screen.findByText('rehovot')).toBeInTheDocument()
+    expect(screen.getByLabelText('Minimum fit rated by the AI (%)')).toHaveValue(40)
+  })
+
+  test('GivenEditedSettings_WhenUsingRecommended_ThenServerSettingsReplaceTheForm', async () => {
+    const api = mockApi({
+      'GET /api/users/1/search': { body: settings({ titles: ['x'] }) },
+      'GET /api/users/1/search/companies': { body: [] },
+      'POST /api/users/1/search/reset': { body: settings({ titles: ['qa', 'junior'] }) },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+    await screen.findByText('x')
+
+    await user.click(screen.getByRole('button', { name: 'Use recommended settings' }))
+
+    expect(await screen.findByText('qa')).toBeInTheDocument()
+    expect(screen.getByText('junior')).toBeInTheDocument()
+    expect(screen.queryByText('x')).not.toBeInTheDocument()
+    expect(api.to('POST /api/users/1/search/reset')).toHaveLength(1)
   })
 
   test('GivenCareerPageLink_WhenAddingCompany_ThenItIsSentAndListReloads', async () => {

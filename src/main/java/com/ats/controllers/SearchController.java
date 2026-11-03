@@ -31,6 +31,13 @@ public class SearchController {
 		return respond(userId);
 	}
 
+	/** Puts the recommended titles, places and thresholds back; the searched companies stay. */
+	@PostMapping("/reset")
+	public SettingsResponse reset(@PathVariable Long userId) {
+		search.resetToRecommended(userId);
+		return respond(userId);
+	}
+
 	@PostMapping("/run")
 	@ResponseStatus(HttpStatus.ACCEPTED)
 	public SettingsResponse run(@PathVariable Long userId) {
@@ -56,7 +63,7 @@ public class SearchController {
 	}
 
 	private SettingsResponse respond(Long userId) {
-		return SettingsResponse.from(search.settings(userId), search.isRunning(userId));
+		return SettingsResponse.from(search.settings(userId), search.isRunning(userId), search.aggregatorEnabled());
 	}
 
 }

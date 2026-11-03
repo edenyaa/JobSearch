@@ -36,7 +36,9 @@ export function SearchPage() {
         titles: data.titles,
         excludedTitles: data.excludedTitles,
         locations: data.locations,
+        priorityLocations: data.priorityLocations,
         minMatchPercent: data.minMatchPercent,
+        minFitPercent: data.minFitPercent,
         daily: data.daily,
       })
     }
@@ -89,6 +91,20 @@ export function SearchPage() {
       } catch (e) {
         setError(messageOf(e))
       }
+    }
+    setBusy(false)
+  }
+
+  async function resetSettings() {
+    setBusy(true)
+    setError(null)
+    try {
+      const reset = await searchApi.reset(userId)
+      settings.setData(reset)
+      setForm(null) // reloaded from the reset settings by the effect above
+      setSaved(false)
+    } catch (e) {
+      setError(messageOf(e))
     }
     setBusy(false)
   }
@@ -148,6 +164,24 @@ export function SearchPage() {
         </div>
       </div>
 
+      <div className="card column">
+        <h2>Where it looks</h2>
+        <ul className="bullets">
+          <li>Remote job boards (Remotive, Arbeitnow).</li>
+          <li>The career pages of the companies below (Greenhouse, Lever, Ashby, or any careers page that lists jobs).</li>
+          <li>
+            {data.aggregatorEnabled ? (
+              <>LinkedIn, Glassdoor and Indeed listings are included, through JSearch.</>
+            ) : (
+              <>
+                LinkedIn, Glassdoor and Indeed listings: off. To turn them on, add a JSearch (RapidAPI) key as{' '}
+                <code>JSEARCH_API_KEY</code> on the server.
+              </>
+            )}
+          </li>
+        </ul>
+      </div>
+
       <form className="card form" onSubmit={submit}>
         <h2>What to look for</h2>
         <TagInput
@@ -163,10 +197,16 @@ export function SearchPage() {
           placeholder="e.g. senior, manager"
         />
         <TagInput
-          label="Places"
+          label="Places (only jobs here are saved)"
           value={form.locations}
           onChange={(value) => set('locations', value)}
-          placeholder="e.g. tel aviv, remote (empty means anywhere)"
+          placeholder="e.g. israel, tel aviv (empty means anywhere)"
+        />
+        <TagInput
+          label="Priority places (ranked first)"
+          value={form.priorityLocations}
+          onChange={(value) => set('priorityLocations', value)}
+          placeholder="e.g. rehovot"
         />
         <div className="field">
           <label htmlFor="min-match">Minimum skill match (%)</label>
@@ -183,6 +223,21 @@ export function SearchPage() {
           </small>
         </div>
         <div className="field">
+          <label htmlFor="min-fit">Minimum fit rated by the AI (%)</label>
+          <input
+            id="min-fit"
+            type="number"
+            min={0}
+            max={100}
+            value={form.minFitPercent}
+            onChange={(e) => set('minFitPercent', Number(e.target.value))}
+          />
+          <small className="muted">
+            The AI reads your CV against each of the best openings and rates the fit. Openings below this are dropped. Jobs in
+            priority places get a bonus.
+          </small>
+        </div>
+        <div className="field">
           <label htmlFor="daily">
             <input id="daily" type="checkbox" checked={form.daily} onChange={(e) => set('daily', e.target.checked)} /> Also
             search by itself every 3 hours, even when I am not on the website
@@ -193,6 +248,9 @@ export function SearchPage() {
           <button type="submit" className="btn" disabled={busy}>
             Save settings
           </button>
+          <button type="button" className="btn btn-ghost" disabled={busy} onClick={resetSettings}>
+            Use recommended settings
+          </button>
           {saved && <span className="muted">Saved.</span>}
         </div>
       </form>
@@ -201,12 +259,12 @@ export function SearchPage() {
         <h2>Companies searched</h2>
         <p className="muted">
           Every search reads these companies' career pages. Companies found along the way are added here too. Add a company
-          by its name, or paste the link of its Greenhouse or Lever career page.
+          by its name, or paste the link of its careers page (Greenhouse, Lever, Ashby, or the company's own site).
         </p>
         <form className="actions" onSubmit={addCompany}>
           <input
             aria-label="Company name or career page link"
-            placeholder="Company name or career page link"
+            placeholder="Company name or careers page link"
             value={company}
             onChange={(e) => setCompany(e.target.value)}
           />

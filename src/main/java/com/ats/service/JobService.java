@@ -67,6 +67,16 @@ public class JobService {
 		return j;
 	}
 
+	/** Records where the job is and how well it fits; the job search calls it right after creating the job. */
+	public Job annotate(Long userId, Long id, String location, Integer fitScore, String fitNote, boolean priority) {
+		Job j = get(userId, id);
+		j.setLocation(location == null || location.length() <= 250 ? location : location.substring(0, 250));
+		j.setFitScore(fitScore);
+		j.setFitNote(fitNote == null || fitNote.length() <= 1000 ? fitNote : fitNote.substring(0, 1000));
+		j.setPriorityPlace(priority);
+		return j;
+	}
+
 	public void delete(Long userId, Long id) {
 		jobs.delete(get(userId, id));
 	}

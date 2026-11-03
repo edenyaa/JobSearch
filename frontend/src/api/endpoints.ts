@@ -85,6 +85,7 @@ export const searchApi = {
   update: (userId: number, input: SearchSettingsInput) =>
     request<SearchSettings>('PUT', `/users/${userId}/search`, input),
   run: (userId: number) => request<SearchSettings>('POST', `/users/${userId}/search/run`),
+  reset: (userId: number) => request<SearchSettings>('POST', `/users/${userId}/search/reset`),
   companies: (userId: number) => request<SearchedCompany[]>('GET', `/users/${userId}/search/companies`),
   addCompany: (userId: number, company: string) =>
     request<SearchedCompany>('POST', `/users/${userId}/search/companies`, { company }),

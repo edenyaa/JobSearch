@@ -36,6 +36,18 @@ public class Job {
 
 	private LocalDate appliedDate;
 
+	/** Where the job is, as the posting says (set by the job search). */
+	private String location;
+
+	/** How well the job fits the user's CV, 0 to 100 (set by the job search). */
+	private Integer fitScore;
+
+	@Column(length = 1000)
+	private String fitNote;
+
+	/** True when the job is in one of the places the user ranks first. */
+	private Boolean priorityPlace;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false)
 	private JobStatus status = JobStatus.APPLIED;

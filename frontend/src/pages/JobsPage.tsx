@@ -9,13 +9,22 @@ import { Icon } from '../components/Icon'
 import { StatusBadge } from '../components/StatusBadge'
 import { useLoad } from '../hooks/useLoad'
 
-type SortKey = 'newest' | 'oldest' | 'title'
+type SortKey = 'fit' | 'newest' | 'oldest' | 'title'
 type View = 'cards' | 'table'
 
 function sortJobs(jobs: Job[], sort: SortKey): Job[] {
   const copy = [...jobs]
   if (sort === 'title') {
     return copy.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? ''))
+  }
+  if (sort === 'fit') {
+    // best fit first; jobs without a fit score (added by hand) follow, newest first
+    return copy.sort(
+      (a, b) =>
+        (b.fitScore ?? -1) - (a.fitScore ?? -1) ||
+        (b.appliedDate ?? '').localeCompare(a.appliedDate ?? '') ||
+        a.id - b.id,
+    )
   }
   const direction = sort === 'newest' ? -1 : 1
   return copy.sort((a, b) => direction * ((a.appliedDate ?? '').localeCompare(b.appliedDate ?? '') || a.id - b.id))
@@ -26,13 +35,26 @@ function titleOf(job: Job) {
 }
 
 function metaOf(job: Job) {
-  return [job.company, job.jobNumber, job.appliedDate].filter(Boolean).join(' · ')
+  return [job.company, job.location, job.jobNumber, job.appliedDate].filter(Boolean).join(' · ')
+}
+
+function FitTags({ job }: { job: Job }) {
+  return (
+    <>
+      {job.fitScore !== null && (
+        <span className={`tag ${job.fitScore >= 70 ? 'tag-good' : ''}`} title={job.fitNote ?? undefined}>
+          Fit {job.fitScore}%
+        </span>
+      )}
+      {job.priorityPlace && <span className="tag tag-good">Priority place</span>}
+    </>
+  )
 }
 
 export function JobsPage() {
   const userId = useUserId()
   const [status, setStatus] = useState<JobStatus | ''>('')
-  const [sort, setSort] = useState<SortKey>('newest')
+  const [sort, setSort] = useState<SortKey>('fit')
   const [view, setView] = useState<View>('cards')
   const jobs = useLoad(() => jobsApi.list(userId, status || undefined), [userId, status])
   const sorted = useMemo(() => sortJobs(jobs.data ?? [], sort), [jobs.data, sort])
@@ -69,6 +91,7 @@ export function JobsPage() {
             Sort jobs
           </label>
           <select id="sort-jobs" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+            <option value="fit">Best fit first</option>
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
             <option value="title">Title A to Z</option>
@@ -104,6 +127,7 @@ export function JobsPage() {
               </div>
               <div className="job-card-foot">
                 <div className="tags">
+                  <FitTags job={job} />
                   {job.hasTailoredResume && <span className="tag tag-good">Tailored CV ready</span>}
                 </div>
                 <div className="quick-actions">
@@ -125,6 +149,7 @@ export function JobsPage() {
                 <th>Job</th>
                 <th>Details</th>
                 <th>Status</th>
+                <th>Fit</th>
                 <th>CV</th>
                 <th>
                   <span className="sr-only">Actions</span>
@@ -142,6 +167,9 @@ export function JobsPage() {
                   <td className="muted">{metaOf(job)}</td>
                   <td>
                     <StatusBadge status={job.status} />
+                  </td>
+                  <td>
+                    <FitTags job={job} />
                   </td>
                   <td>{job.hasTailoredResume ? <span className="tag tag-good">Tailored CV ready</span> : <span className="muted">-</span>}</td>
                   <td>

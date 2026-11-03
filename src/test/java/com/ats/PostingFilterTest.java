@@ -37,6 +37,35 @@ class PostingFilterTest {
     }
 
     @Test
+    public void GivenShortTitleTerm_WhenFiltering_ThenOnlyWholeWordsMatch() {
+        List<String> titles = List.of("ai", "qa");
+        List<String> places = List.of("israel");
+
+        assertTrue(PostingFilter.wanted(posting("AI Engineer", "Israel"), titles, List.of(), places));
+        assertTrue(PostingFilter.wanted(posting("QA Automation", "Israel"), titles, List.of(), places));
+        assertFalse(PostingFilter.wanted(posting("Email Marketer", "Israel"), titles, List.of(), places));
+        assertFalse(PostingFilter.wanted(posting("Maintenance Technician", "Israel"), titles, List.of(), places));
+    }
+
+    @Test
+    public void GivenInternTerm_WhenFiltering_ThenInternshipsMatchButInternalDoesNot() {
+        List<String> titles = List.of("intern");
+        List<String> places = List.of("israel");
+
+        assertTrue(PostingFilter.wanted(posting("Software Intern", "Israel"), titles, List.of(), places));
+        assertTrue(PostingFilter.wanted(posting("QA Internship", "Israel"), titles, List.of(), places));
+        assertFalse(PostingFilter.wanted(posting("Internal Tools Engineer", "Israel"), titles, List.of(), places));
+        assertFalse(PostingFilter.wanted(posting("International Sales", "Israel"), titles, List.of(), places));
+    }
+
+    @Test
+    public void GivenPriorityPlaces_WhenChecking_ThenRehovotIsFoundCaseInsensitively() {
+        assertTrue(PostingFilter.inPriorityPlace(posting("Dev", "REHOVOT, Israel"), List.of("rehovot")));
+        assertFalse(PostingFilter.inPriorityPlace(posting("Dev", "Tel Aviv"), List.of("rehovot")));
+        assertFalse(PostingFilter.inPriorityPlace(posting("Dev", "Tel Aviv"), List.of()));
+    }
+
+    @Test
     public void GivenOtherPlace_WhenFiltering_ThenNotWanted() {
         assertFalse(wanted("Java Developer", "Boston, MA"));
     }

@@ -36,12 +36,17 @@ public final class JobDtos {
 			JobStatus status,
 			String notes,
 			String tailoredResumeFileName,
-			boolean hasTailoredResume) {
+			boolean hasTailoredResume,
+			String location,
+			Integer fitScore,
+			String fitNote,
+			boolean priorityPlace) {
 
 		public static JobResponse from(Job j) {
 			return new JobResponse(j.getId(), j.getJobNumber(), j.getTitle(), j.getCompany(), j.getDescription(),
 					j.getLink(), j.getAppliedDate(), j.getStatus(), j.getNotes(), j.getTailoredResumeFileName(),
-					j.getTailoredResume() != null);
+					j.getTailoredResume() != null, j.getLocation(), j.getFitScore(), j.getFitNote(),
+					Boolean.TRUE.equals(j.getPriorityPlace()));
 		}
 	}
 

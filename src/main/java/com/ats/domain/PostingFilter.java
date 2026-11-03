@@ -21,7 +21,7 @@ public final class PostingFilter {
 	 */
 	public static boolean wanted(Posting p, List<String> titles, List<String> excluded, List<String> locations) {
 		String title = p.title().toLowerCase(Locale.ROOT);
-		if (titles.stream().noneMatch(t -> title.contains(t.toLowerCase(Locale.ROOT)))) {
+		if (titles.stream().noneMatch(t -> titleHas(title, t))) {
 			return false;
 		}
 		for (String word : excluded) {
@@ -31,6 +31,29 @@ public final class PostingFilter {
 		}
 		String place = p.location().toLowerCase(Locale.ROOT);
 		return locations.isEmpty() || locations.stream().anyMatch(l -> place.contains(l.toLowerCase(Locale.ROOT)));
+	}
+
+	/**
+	 * A wanted title term must start a word of the title ("developer" finds "Developers"), and a short one such as
+	 * "ai" or "qa" must be a whole word, so "ai" does not find "email" or "maintain".
+	 */
+	private static boolean titleHas(String title, String term) {
+		String t = term.strip().toLowerCase(Locale.ROOT);
+		if (t.isEmpty()) {
+			return false;
+		}
+		if (t.equals("intern")) {
+			// "intern", "interns", "internship", but not "internal" or "international"
+			return Pattern.compile("\\bintern(?:s|ship|ships)?\\b").matcher(title).find();
+		}
+		String end = t.length() <= 3 ? "\\b" : "";
+		return Pattern.compile("\\b" + Pattern.quote(t) + end).matcher(title).find();
+	}
+
+	/** True when the opening is in one of the places the user ranks first. */
+	public static boolean inPriorityPlace(Posting p, List<String> priorityLocations) {
+		String place = p.location().toLowerCase(Locale.ROOT);
+		return priorityLocations.stream().anyMatch(l -> !l.isBlank() && place.contains(l.toLowerCase(Locale.ROOT)));
 	}
 
 	/** HTML (Greenhouse sends it entity-escaped) to readable plain text. */

@@ -35,6 +35,17 @@ public class SearchSettings {
 	@ElementCollection(fetch = FetchType.EAGER)
 	private List<String> locations = new ArrayList<>();
 
+	/** Jobs in these places are ranked first and get a fit bonus. */
+	@ElementCollection(fetch = FetchType.EAGER)
+	private List<String> priorityLocations = new ArrayList<>();
+
+	/** An opening the AI rates below this fit is not saved; null means the default of 40. */
+	private Integer minFitPercent;
+
+	public int minFit() {
+		return minFitPercent == null ? 40 : minFitPercent;
+	}
+
 	/** Openings where fewer than this share of the skills they mention are in the CV are not saved. */
 	private int minMatchPercent = 20;
 

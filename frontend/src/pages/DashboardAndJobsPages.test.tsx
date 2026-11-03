@@ -226,6 +226,37 @@ describe('JobsPage', () => {
     expect(screen.getAllByRole('link', { name: /^(Zeta|Alpha)$/ }).map((a) => a.textContent)).toEqual(['Alpha', 'Zeta'])
   })
 
+  test('GivenJobsWithFitScores_WhenOpening_ThenBestFitComesFirstWithFitAndPriorityTags', async () => {
+    mockApi({
+      'GET /api/users/1/jobs': {
+        body: [
+          makeJob({ id: 1, title: 'Manual job', appliedDate: '2026-03-01' }),
+          makeJob({ id: 2, title: 'Okay fit', fitScore: 55, fitNote: 'Some skills match', appliedDate: '2026-01-01' }),
+          makeJob({
+            id: 3,
+            title: 'Great fit',
+            fitScore: 92,
+            priorityPlace: true,
+            location: 'Rehovot, Israel',
+            appliedDate: '2026-01-01',
+          }),
+        ],
+      },
+    })
+    renderApp('/jobs')
+    await screen.findByRole('link', { name: 'Great fit' })
+
+    expect(screen.getAllByRole('link', { name: /^(Manual job|Okay fit|Great fit)$/ }).map((a) => a.textContent)).toEqual([
+      'Great fit',
+      'Okay fit',
+      'Manual job',
+    ])
+    expect(screen.getByText('Fit 92%')).toBeInTheDocument()
+    expect(screen.getByText('Fit 55%')).toBeInTheDocument()
+    expect(screen.getByText('Priority place')).toBeInTheDocument()
+    expect(screen.getByText(/Rehovot, Israel/)).toBeInTheDocument()
+  })
+
   test('GivenJobs_WhenOpening_ThenTheCountIsShown', async () => {
     mockApi({ 'GET /api/users/1/jobs': { body: [makeJob({ id: 1 }), makeJob({ id: 2, title: 'Other' })] } })
     renderApp('/jobs')
