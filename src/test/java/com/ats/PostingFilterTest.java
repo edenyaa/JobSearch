@@ -89,6 +89,16 @@ class PostingFilterTest {
     }
 
     @Test
+    public void GivenLinkWithAdvertisingParameters_WhenCleaning_ThenOnlyTheMeaningfulPartRemains() {
+        assertEquals("https://amazon.jobs/content/en/teams/annapurna-labs?country%5B%5D=IL",
+                PostingFilter.cleanUrl("https://amazon.jobs/content/en/teams/annapurna-labs?country%5B%5D=IL&cmpid=SA_GOAG200485C"
+                        + "&gad_source=1&gad_campaignid=23946687794&gbraid=0AAA&gclid=Cj0K#search"));
+        assertEquals("https://x.com/careers", PostingFilter.cleanUrl("  https://x.com/careers?utm_source=a&fbclid=b#top "));
+        assertEquals("https://x.com/jobs?team=qa&city=tlv", PostingFilter.cleanUrl("https://x.com/jobs?team=qa&city=tlv"));
+        assertEquals("https://x.com/careers", PostingFilter.cleanUrl("https://x.com/careers"));
+    }
+
+    @Test
     public void GivenCountryCode_WhenNaming_ThenItBecomesTheEnglishName() {
         assertEquals("Israel", com.ats.service.JobBoards.countryName("IL"));
         assertEquals("Israel", com.ats.service.JobBoards.countryName("Israel"));

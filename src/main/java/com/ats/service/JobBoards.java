@@ -28,6 +28,8 @@ public class JobBoards {
 	public static final String GREENHOUSE = "greenhouse";
 	public static final String LEVER = "lever";
 	public static final String ASHBY = "ashby";
+	/** Amazon's own job site; the slug is the three-letter country code to list, such as ISR. */
+	public static final String AMAZON = "amazon";
 	/** Any career page that publishes its openings as schema.org JobPosting data; the slug is the page address. */
 	public static final String PAGE = "page";
 
@@ -84,7 +86,8 @@ public class JobBoards {
 		return switch (board.kind()) {
 			case GREENHOUSE -> get("https://boards-api.greenhouse.io/v1/boards/" + board.slug() + "/jobs").isPresent();
 			case ASHBY -> get("https://api.ashbyhq.com/posting-api/job-board/" + board.slug()).isPresent();
-			case PAGE -> !openings(board, "").isEmpty();
+			case AMAZON -> amazonPage(board.slug(), 0).isPresent();
+			case PAGE -> getText(board.slug()).isPresent();
 			default -> get("https://api.lever.co/v0/postings/" + board.slug() + "?mode=json").isPresent();
 		};
 	}
@@ -110,6 +113,24 @@ public class JobBoards {
 				found.add(new Posting(ASHBY, j.path("id").asString(""), j.path("title").asString(""), company, place,
 						j.path("jobUrl").asString(""), j.path("descriptionHtml").asString("")));
 			}
+		} else if (AMAZON.equals(board.kind())) {
+			// 100 per page, three pages at most: enough for a country's openings
+			for (int offset = 0; offset < 300; offset += 100) {
+				Optional<JsonNode> page = amazonPage(board.slug(), offset);
+				JsonNode jobs = page.map(n -> n.path("jobs")).orElse(mapper.createArrayNode());
+				for (JsonNode j : jobs) {
+					String country = j.path("country_code").asString("");
+					String details = j.path("description").asString("") + "<br/><br/>Basic qualifications:<br/>"
+							+ j.path("basic_qualifications").asString("") + "<br/><br/>Preferred qualifications:<br/>"
+							+ j.path("preferred_qualifications").asString("");
+					found.add(new Posting(AMAZON, j.path("id").asString(""), j.path("title").asString(""), company,
+							j.path("city").asString("") + ", " + ("ISR".equals(country) ? "Israel" : country),
+							"https://www.amazon.jobs" + j.path("job_path").asString(""), details));
+				}
+				if (jobs.size() < 100) {
+					break;
+				}
+			}
 		} else if (PAGE.equals(board.kind())) {
 			found.addAll(parseJobPostings(getText(board.slug()).orElse(""), board.slug(), company));
 		} else {
@@ -122,6 +143,11 @@ public class JobBoards {
 			}
 		}
 		return found;
+	}
+
+	private Optional<JsonNode> amazonPage(String countryCode, int offset) {
+		return get("https://www.amazon.jobs/en/search.json?base_query=&result_limit=100&offset=" + offset
+				+ "&normalized_country_code%5B%5D=" + URLEncoder.encode(countryCode, StandardCharsets.UTF_8));
 	}
 
 	/** What a source returned, and why it returned nothing when something went wrong. */

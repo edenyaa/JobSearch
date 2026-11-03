@@ -2,7 +2,6 @@ package com.ats.dto;
 
 import com.ats.domain.SearchSettings;
 import com.ats.domain.WatchedCompany;
-import jakarta.validation.constraints.NotBlank;
 import java.time.Instant;
 import java.util.List;
 
@@ -49,14 +48,18 @@ public final class SearchDtos {
 	public record ImportRequest(List<String> names) {
 	}
 
-	/** A company name, or the link of its Greenhouse or Lever career page. */
-	public record WatchRequest(@NotBlank String company) {
+	/**
+	 * A company to search: its careers page link, or just its name (the page is then looked up). The name shown is
+	 * optional when a link is given.
+	 */
+	public record WatchRequest(String company, String name, String link) {
 	}
 
-	public record WatchedResponse(Long id, String name, String board, String slug) {
+	/** {@code openings} is how many were read from the page when it was added; null in the list. */
+	public record WatchedResponse(Long id, String name, String board, String slug, String link, Integer openings) {
 
-		public static WatchedResponse from(WatchedCompany w) {
-			return new WatchedResponse(w.getId(), w.getName(), w.getBoard(), w.getSlug());
+		public static WatchedResponse from(WatchedCompany w, Integer openings) {
+			return new WatchedResponse(w.getId(), w.getName(), w.getBoard(), w.getSlug(), w.getAddress(), openings);
 		}
 	}
 

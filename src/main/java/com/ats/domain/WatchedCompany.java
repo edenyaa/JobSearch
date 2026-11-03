@@ -27,7 +27,12 @@ public class WatchedCompany {
 	@Column(nullable = false)
 	private String board;
 
+	/** For a "page" board a short fingerprint of the address; otherwise the board's own name for the company. */
 	@Column(nullable = false)
 	private String slug;
+
+	/** The careers page address, for a "page" board only. */
+	@Column(length = 2000)
+	private String address;
 
 }

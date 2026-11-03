@@ -13,6 +13,7 @@ import type {
   LoginResponse,
   MatchResult,
   SearchedCompany,
+  SearchedCompanyInput,
   SearchSettings,
   SearchSettingsInput,
   Skill,
@@ -87,8 +88,8 @@ export const searchApi = {
   run: (userId: number) => request<SearchSettings>('POST', `/users/${userId}/search/run`),
   reset: (userId: number) => request<SearchSettings>('POST', `/users/${userId}/search/reset`),
   companies: (userId: number) => request<SearchedCompany[]>('GET', `/users/${userId}/search/companies`),
-  addCompany: (userId: number, company: string) =>
-    request<SearchedCompany>('POST', `/users/${userId}/search/companies`, { company }),
+  addCompany: (userId: number, input: SearchedCompanyInput) =>
+    request<SearchedCompany>('POST', `/users/${userId}/search/companies`, input),
   importCompanies: (userId: number, names: string[]) =>
     request<SearchSettings>('POST', `/users/${userId}/search/companies/import`, { names }),
   removeCompany: (userId: number, id: number) => request<void>('DELETE', `/users/${userId}/search/companies/${id}`),

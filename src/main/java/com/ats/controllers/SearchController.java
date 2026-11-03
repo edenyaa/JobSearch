@@ -48,13 +48,14 @@ public class SearchController {
 
 	@GetMapping("/companies")
 	public List<WatchedResponse> companies(@PathVariable Long userId) {
-		return search.watched(userId).stream().map(WatchedResponse::from).toList();
+		return search.watched(userId).stream().map(w -> WatchedResponse.from(w, null)).toList();
 	}
 
 	@PostMapping("/companies")
 	@ResponseStatus(HttpStatus.CREATED)
 	public WatchedResponse watch(@PathVariable Long userId, @Valid @RequestBody WatchRequest req) {
-		return WatchedResponse.from(search.watch(userId, req.company()));
+		JobSearchService.Watched added = search.watch(userId, req.company(), req.name(), req.link());
+		return WatchedResponse.from(added.company(), added.openings());
 	}
 
 	/** Looks up many companies' career pages in the background; no names means the built-in Israeli list. */

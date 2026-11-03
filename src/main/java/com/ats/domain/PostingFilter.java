@@ -87,6 +87,24 @@ public final class PostingFilter {
 		return out.toString();
 	}
 
+	private static final Pattern TRACKING_PARAM = Pattern
+			.compile("(utm_.*|gclid|gbraid|wbraid|gad_.*|fbclid|msclkid|yclid|cmpid|mc_cid|mc_eid|igshid|ref|ref_.*)");
+
+	/** A pasted link without its #fragment and its advertising and tracking parameters. */
+	public static String cleanUrl(String url) {
+		String link = url.strip().replaceFirst("#.*$", "");
+		int question = link.indexOf('?');
+		if (question < 0) {
+			return link;
+		}
+		List<String> kept = java.util.Arrays.stream(link.substring(question + 1).split("&"))
+				.filter(part -> !part.isBlank()
+						&& !TRACKING_PARAM.matcher(part.split("=", 2)[0].toLowerCase(Locale.ROOT)).matches())
+				.toList();
+		String base = link.substring(0, question);
+		return kept.isEmpty() ? base : base + "?" + String.join("&", kept);
+	}
+
 	/** Lower-case letters and digits only, so "Wix.com Ltd" and "wix com ltd" compare equal. */
 	public static String key(String name) {
 		return name == null ? "" : name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");

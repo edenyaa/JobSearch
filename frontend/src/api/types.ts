@@ -146,6 +146,13 @@ export interface SearchedCompany {
   name: string
   board: string
   slug: string
+  link: string | null
+  openings: number | null
+}
+
+export interface SearchedCompanyInput {
+  name: string
+  link: string
 }
 
 export interface MatchResult {

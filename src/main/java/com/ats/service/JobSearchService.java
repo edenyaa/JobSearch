@@ -61,8 +61,8 @@ public class JobSearchService {
 			.compile("greenhouse\\.io/(?:embed/job_board\\?for=)?([A-Za-z0-9_-]+)");
 	private static final Pattern ASHBY_URL = Pattern.compile("jobs\\.ashbyhq\\.com/([A-Za-z0-9_.-]+)");
 	private static final Duration AGGREGATOR_MIN_GAP = Duration.ofHours(6);
-	/** The columns hold 255 characters, which a career page address must fit in. */
-	private static final int MAX_ADDRESS = 255;
+	/** The address column holds 2000 characters. */
+	private static final int MAX_ADDRESS = 2000;
 	private static final Pattern LEVER_URL = Pattern.compile("jobs\\.lever\\.co/([A-Za-z0-9_-]+)");
 
 	/** Israeli companies whose Greenhouse career pages are searched until the user changes the list. */
@@ -190,56 +190,117 @@ public class JobSearchService {
 		return watchedRepo.findByUserIdOrderByNameAsc(userId);
 	}
 
-	/** Adds a company by name or by the link of its Greenhouse or Lever career page. */
-	public WatchedCompany watch(Long userId, String input) {
-		String text = input.strip();
+	/** A company added to the search, and how many openings were read from its page when it was added. */
+	public record Watched(WatchedCompany company, int openings) {
+	}
+
+	/**
+	 * Adds a company to the search. Give the link of its careers page, or only its name and the page is looked up.
+	 * The name is optional when a link is given. Advertising parameters in a pasted link are dropped.
+	 */
+	public Watched watch(Long userId, String company, String name, String link) {
+		String text = link != null && !link.isBlank() ? link.strip() : company == null ? "" : company.strip();
+		if (text.isEmpty()) {
+			throw new ValidationException("Enter the company name, or the link of its careers page.");
+		}
 		Board board;
-		String name;
+		String derived;
 		Matcher greenhouse = GREENHOUSE_URL.matcher(text);
 		Matcher lever = LEVER_URL.matcher(text);
 		Matcher ashby = ASHBY_URL.matcher(text);
+		boolean isLink = text.matches("(?i)https?://\\S+");
 		if (greenhouse.find()) {
 			board = new Board(JobBoards.GREENHOUSE, greenhouse.group(1));
-			name = capitalize(board.slug());
+			derived = capitalize(board.slug());
 		} else if (lever.find()) {
 			board = new Board(JobBoards.LEVER, lever.group(1));
-			name = capitalize(board.slug());
+			derived = capitalize(board.slug());
 		} else if (ashby.find()) {
 			board = new Board(JobBoards.ASHBY, ashby.group(1));
-			name = capitalize(board.slug());
-		} else if (text.matches("(?i)https?://\\S+")) {
-			if (text.length() > MAX_ADDRESS) {
-				throw new ValidationException("That link is too long. Use the address of the careers page itself.");
+			derived = capitalize(board.slug());
+		} else if (isLink && hostOf(text).matches("(?i)(www\\.)?amazon\\.jobs")) {
+			board = new Board(JobBoards.AMAZON, amazonCountry(text));
+			derived = "Amazon";
+		} else if (isLink) {
+			String url = PostingFilter.cleanUrl(text);
+			if (url.length() > MAX_ADDRESS) {
+				throw new ValidationException("That link is too long even without its tracking parameters.");
 			}
-			board = new Board(JobBoards.PAGE, text);
-			name = capitalize(URI.create(text).getHost().replaceFirst("^(www|careers|jobs)\\.", "").split("\\.")[0]);
+			board = new Board(JobBoards.PAGE, url);
+			derived = capitalize(hostOf(url).replaceFirst("^(www|careers|jobs)\\.", "").split("\\.")[0]);
 		} else {
 			board = boards.findBoard(text).orElseThrow(() -> new ValidationException("No Greenhouse, Lever or Ashby "
-					+ "career page found for " + text + ". Paste the link of its careers page instead."));
-			name = text;
+					+ "career page found for " + text + ". Paste the link of its careers page as well."));
+			derived = text;
 		}
+		String shown = name != null && !name.isBlank() ? name.strip() : derived;
 		if (!boards.exists(board)) {
-			throw new ValidationException(JobBoards.PAGE.equals(board.kind())
-					? "No job postings were found on that page. It must list its openings in schema.org JobPosting "
-							+ "data, which pages built only with JavaScript often do not."
-					: "That career page could not be opened.");
+			throw new ValidationException("That careers page could not be opened.");
 		}
 		settings(userId);
-		WatchedCompany w = addWatched(userId, name, board);
-		addToCompanies(userId, name);
-		return w;
+		WatchedCompany w = addWatched(userId, shown, board);
+		int openings = boards.openings(board, shown).size();
+		addToCompanies(userId, shown);
+		return new Watched(w, openings);
+	}
+
+	/** The board a saved company is read from. */
+	static Board boardOf(WatchedCompany w) {
+		boolean page = JobBoards.PAGE.equals(w.getBoard()) && w.getAddress() != null;
+		return new Board(w.getBoard(), page ? w.getAddress() : w.getSlug());
 	}
 
 	private WatchedCompany addWatched(Long userId, String name, Board board) {
-		if (watchedRepo.existsByUserIdAndBoardAndSlug(userId, board.kind(), board.slug())) {
+		boolean page = JobBoards.PAGE.equals(board.kind());
+		String slug = page ? fingerprint(board.slug()) : board.slug();
+		if (watchedRepo.existsByUserIdAndBoardAndSlug(userId, board.kind(), slug)) {
 			throw new ConflictException(name + " is already in the search");
 		}
 		WatchedCompany w = new WatchedCompany();
 		w.setUser(users.get(userId));
 		w.setName(name);
 		w.setBoard(board.kind());
-		w.setSlug(board.slug());
+		w.setSlug(slug);
+		w.setAddress(page ? board.slug() : null);
 		return watchedRepo.save(w);
+	}
+
+	private static String hostOf(String url) {
+		try {
+			String host = URI.create(url).getHost();
+			return host == null ? "" : host;
+		} catch (IllegalArgumentException e) {
+			return "";
+		}
+	}
+
+	/** Amazon's list is filtered by country: the link's country (IL or ISR), Israel when it names none. */
+	private static String amazonCountry(String url) {
+		Matcher m = Pattern.compile("(?:country|normalized_country_code)(?:%5B%5D|\\[\\])=([A-Za-z]{2,3})").matcher(url);
+		if (!m.find()) {
+			return "ISR";
+		}
+		String code = m.group(1).toUpperCase(Locale.ROOT);
+		try {
+			return code.length() == 2 ? Locale.of("", code).getISO3Country() : code;
+		} catch (java.util.MissingResourceException e) {
+			return "ISR";
+		}
+	}
+
+	/** A short stable name for an address too long for the unique slug column. */
+	private static String fingerprint(String address) {
+		try {
+			byte[] hash = java.security.MessageDigest.getInstance("SHA-256")
+					.digest(address.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			StringBuilder hex = new StringBuilder("p");
+			for (int i = 0; i < 12; i++) {
+				hex.append(String.format("%02x", hash[i]));
+			}
+			return hex.toString();
+		} catch (java.security.NoSuchAlgorithmException e) {
+			throw new IllegalStateException(e);
+		}
 	}
 
 	public void unwatch(Long userId, Long id) {
@@ -404,7 +465,7 @@ public class JobSearchService {
 		Set<String> watchedNames = new HashSet<>();
 		for (WatchedCompany w : watched) {
 			watchedNames.add(PostingFilter.key(w.getName()));
-			found.addAll(boards.openings(new Board(w.getBoard(), w.getSlug()), w.getName()));
+			found.addAll(boards.openings(boardOf(w), w.getName()));
 		}
 		Map<String, Integer> bySource = new TreeMap<>();
 		found.forEach(p -> bySource.merge(p.source(), 1, Integer::sum));

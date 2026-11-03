@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, test } from 'vitest'
-import type { SearchSettings } from '../api/types'
+import type { SearchedCompany, SearchSettings } from '../api/types'
 import { mockApi, renderApp } from '../test/helpers'
 
 function settings(overrides: Partial<SearchSettings> = {}): SearchSettings {
@@ -23,7 +23,9 @@ function settings(overrides: Partial<SearchSettings> = {}): SearchSettings {
   }
 }
 
-const COMPANIES = [{ id: 1, name: 'Jfrog', board: 'greenhouse', slug: 'jfrog' }]
+const COMPANIES: SearchedCompany[] = [
+  { id: 1, name: 'Jfrog', board: 'greenhouse', slug: 'jfrog', link: null, openings: null },
+]
 
 describe('SearchPage', () => {
   test('GivenSettings_WhenOpening_ThenTheyAndTheSearchedCompaniesAreShown', async () => {
@@ -156,28 +158,93 @@ describe('SearchPage', () => {
     expect(await screen.findByText(/added 31 career pages/)).toBeInTheDocument()
   })
 
-  test('GivenCareerPageLink_WhenAddingCompany_ThenItIsSentAndListReloads', async () => {
+  test('GivenNameAndLink_WhenAddingCompany_ThenBothAreSentAndListReloads', async () => {
     const store = [...COMPANIES]
     const api = mockApi({
       'GET /api/users/1/search': { body: settings() },
       'GET /api/users/1/search/companies': () => ({ body: [...store] }),
-      'POST /api/users/1/search/companies': (call) => {
-        store.push({ id: 2, name: 'Acme', board: 'lever', slug: 'acme' })
-        return { status: 201, body: store[1] || call.body }
+      'POST /api/users/1/search/companies': () => {
+        const added: SearchedCompany = { id: 2, name: 'Acme', board: 'lever', slug: 'acme', link: null, openings: 7 }
+        store.push(added)
+        return { status: 201, body: added }
       },
     })
     const user = userEvent.setup()
     renderApp('/search')
     await screen.findByText('Jfrog')
 
-    await user.type(screen.getByLabelText('Company name or career page link'), 'https://jobs.lever.co/acme')
+    await user.type(screen.getByLabelText('Company name'), 'Acme')
+    await user.type(screen.getByLabelText('Careers page link (optional)'), 'https://jobs.lever.co/acme')
     await user.click(screen.getByRole('button', { name: 'Add company' }))
 
-    expect(await screen.findByText('Acme')).toBeInTheDocument()
-    expect(api.to('POST /api/users/1/search/companies')[0].body).toEqual({ company: 'https://jobs.lever.co/acme' })
+    expect(await screen.findByText('Added Acme: 7 openings found on its page.')).toBeInTheDocument()
+    expect(await screen.findByText('Lever')).toBeInTheDocument()
+    expect(api.to('POST /api/users/1/search/companies')[0].body).toEqual({
+      name: 'Acme',
+      link: 'https://jobs.lever.co/acme',
+    })
   })
 
-  test('GivenUnknownCompany_WhenAdding_ThenServerMessageIsShown', async () => {
+  test('GivenLongAmazonLinkOnly_WhenAddingCompany_ThenTheWholeLinkIsSentAsIs', async () => {
+    const link =
+      'https://amazon.jobs/content/en/teams/annapurna-labs?country%5B%5D=IL&cmpid=SA_GOAG200485C&gad_source=1' +
+      '&gad_campaignid=23946687794&gbraid=0AAAABD62HsNhMqA9ww&gclid=CjwKCAiAqabXBhBUEiwAw_SQpcCnMcK0tj9jI#search'
+    const api = mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+      'POST /api/users/1/search/companies': {
+        status: 201,
+        body: { id: 3, name: 'Amazon', board: 'amazon', slug: 'ISR', link: null, openings: 173 },
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+    await screen.findByLabelText('Company name')
+
+    await user.click(screen.getByLabelText('Careers page link (optional)'))
+    await user.paste(link)
+    await user.click(screen.getByRole('button', { name: 'Add company' }))
+
+    expect(await screen.findByText('Added Amazon: 173 openings found on its page.')).toBeInTheDocument()
+    expect(api.to('POST /api/users/1/search/companies')[0].body).toEqual({ name: '', link })
+  })
+
+  test('GivenPageWithNoReadableJobs_WhenAddingCompany_ThenItIsAddedWithAClearWarning', async () => {
+    mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+      'POST /api/users/1/search/companies': {
+        status: 201,
+        body: { id: 4, name: 'Acme Corp', board: 'page', slug: 'p1', link: 'https://acme.com/careers', openings: 0 },
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+    await screen.findByLabelText('Company name')
+
+    await user.type(screen.getByLabelText('Company name'), 'Acme Corp')
+    await user.type(screen.getByLabelText('Careers page link (optional)'), 'https://acme.com/careers')
+    await user.click(screen.getByRole('button', { name: 'Add company' }))
+
+    expect(await screen.findByText(/Added Acme Corp, but no job listings could be read/)).toBeInTheDocument()
+  })
+
+  test('GivenNothingTyped_WhenAddingCompany_ThenNothingIsSentAndItSaysWhatToEnter', async () => {
+    const api = mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': { body: [] },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+    await screen.findByLabelText('Company name')
+
+    await user.click(screen.getByRole('button', { name: 'Add company' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Enter the company name, the link of its careers page, or both.')
+    expect(api.to('POST /api/users/1/search/companies')).toHaveLength(0)
+  })
+
+  test('GivenUnknownCompany_WhenAdding_ThenServerMessageIsShownNextToTheForm', async () => {
     mockApi({
       'GET /api/users/1/search': { body: settings() },
       'GET /api/users/1/search/companies': { body: [] },
@@ -185,9 +252,9 @@ describe('SearchPage', () => {
     })
     const user = userEvent.setup()
     renderApp('/search')
-    await screen.findByLabelText('Company name or career page link')
+    await screen.findByLabelText('Company name')
 
-    await user.type(screen.getByLabelText('Company name or career page link'), 'Nowhere')
+    await user.type(screen.getByLabelText('Company name'), 'Nowhere')
     await user.click(screen.getByRole('button', { name: 'Add company' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('No career page found for Nowhere.')

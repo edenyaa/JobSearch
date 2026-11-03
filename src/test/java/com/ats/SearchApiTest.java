@@ -170,6 +170,59 @@ class SearchApiTest extends ApiTestSupport {
     }
 
     @Test
+    public void GivenVeryLongAmazonLinkWithTracking_WhenAddingCompany_ThenAmazonIsraelBoardIsAdded() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(true);
+        String link = "https://amazon.jobs/content/en/teams/annapurna-labs?country%5B%5D=IL&cmpid=SA_GOAG200485C&gad_source=1"
+                + "&gad_campaignid=23946687794&gbraid=0AAAABD62HsNhMqA9ww-KCBPfQzS8cqcOM&gclid=CjwKCAiAqabXBhBUEiwAw_SQpcCnMcK0tj9jI_"
+                + "mBG1anwLEOW18JIzu0FQVXymopUCDtPYQS3IFYDhoCAw0QAvD_BwE#search";
+        when(boards.openings(any(), anyString())).thenReturn(List.of(
+                new Posting("amazon", "1", "SDE", "Amazon", "Haifa, Israel", "https://www.amazon.jobs/en/jobs/1", "d")));
+
+        mvc.perform(json(post(base(account) + "/companies"), account, "{\"link\":\"" + link + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.board").value("amazon"))
+                .andExpect(jsonPath("$.slug").value("ISR"))
+                .andExpect(jsonPath("$.name").value("Amazon"))
+                .andExpect(jsonPath("$.openings").value(1));
+    }
+
+    @Test
+    public void GivenNameAndLongTrackedLink_WhenAddingCompany_ThenNameIsKeptAndLinkIsCleaned() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(true);
+
+        mvc.perform(json(post(base(account) + "/companies"), account,
+                "{\"name\":\"Acme Corp\",\"link\":\"https://careers.acme.com/jobs?team=qa&utm_source=x&gclid=abc#top\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.name").value("Acme Corp"))
+                .andExpect(jsonPath("$.board").value("page"))
+                .andExpect(jsonPath("$.link").value("https://careers.acme.com/jobs?team=qa"))
+                .andExpect(jsonPath("$.openings").value(0));
+        mvc.perform(get("/api/users/" + account.id() + "/companies").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[*].name", hasItem("Acme Corp")));
+    }
+
+    @Test
+    public void GivenVeryLongLinkOverTwoHundredFiftyFiveCharacters_WhenAddingCompany_ThenItIsAccepted() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(true);
+        String link = "https://careers.example.com/search?q=" + "a".repeat(400);
+
+        mvc.perform(json(post(base(account) + "/companies"), account, "{\"name\":\"Example\",\"link\":\"" + link + "\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.link").value(link));
+    }
+
+    @Test
+    public void GivenNeitherNameNorLink_WhenAddingCompany_ThenBadRequest() throws Exception {
+        Account account = newAccount();
+
+        mvc.perform(json(post(base(account) + "/companies"), account, "{\"company\":\"\",\"name\":\"X\",\"link\":\" \"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     public void GivenCareerSiteWithoutJobData_WhenAddingCompany_ThenBadRequestExplains() throws Exception {
         Account account = newAccount();
         when(boards.exists(any())).thenReturn(false);

@@ -11,6 +11,14 @@ import { useLoad } from '../hooks/useLoad'
 
 const POLL_MILLIS = 3000
 
+const BOARD_LABELS: Record<string, string> = {
+  greenhouse: 'Greenhouse',
+  lever: 'Lever',
+  ashby: 'Ashby',
+  amazon: 'Amazon jobs',
+  page: 'Company site',
+}
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleString()
 }
@@ -20,7 +28,10 @@ export function SearchPage() {
   const settings = useLoad(() => searchApi.get(userId), [userId])
   const companies = useLoad(() => searchApi.companies(userId), [userId])
   const [form, setForm] = useState<SearchSettingsInput | null>(null)
-  const [company, setCompany] = useState('')
+  const [companyName, setCompanyName] = useState('')
+  const [companyLink, setCompanyLink] = useState('')
+  const [companyError, setCompanyError] = useState<string | null>(null)
+  const [companyNotice, setCompanyNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -113,27 +124,38 @@ export function SearchPage() {
 
   async function addCompany(event: FormEvent) {
     event.preventDefault()
-    if (company.trim() === '') return
-    setError(null)
+    setCompanyError(null)
+    setCompanyNotice(null)
+    if (companyName.trim() === '' && companyLink.trim() === '') {
+      setCompanyError('Enter the company name, the link of its careers page, or both.')
+      return
+    }
     setAdding(true)
     try {
-      await searchApi.addCompany(userId, company.trim())
-      setCompany('')
+      const added = await searchApi.addCompany(userId, { name: companyName.trim(), link: companyLink.trim() })
+      setCompanyName('')
+      setCompanyLink('')
+      setCompanyNotice(
+        added.openings === null || added.openings > 0
+          ? `Added ${added.name}${added.openings ? `: ${added.openings} openings found on its page.` : '.'}`
+          : `Added ${added.name}, but no job listings could be read from its page yet. It is checked again on every search. ` +
+              'If it never finds jobs, try a link from Greenhouse, Lever or Ashby instead.',
+      )
       companies.reload()
     } catch (e) {
-      setError(messageOf(e))
+      setCompanyError(messageOf(e))
     } finally {
       setAdding(false)
     }
   }
 
   async function importNames(list: string[]) {
-    setError(null)
+    setCompanyError(null)
     try {
       settings.setData(await searchApi.importCompanies(userId, list))
       setNames('')
     } catch (e) {
-      setError(messageOf(e))
+      setCompanyError(messageOf(e))
     }
   }
 
@@ -150,7 +172,7 @@ export function SearchPage() {
       await searchApi.removeCompany(userId, id)
       companies.reload()
     } catch (e) {
-      setError(messageOf(e))
+      setCompanyError(messageOf(e))
     }
   }
 
@@ -278,27 +300,53 @@ export function SearchPage() {
       <div className="card column">
         <h2>Companies searched</h2>
         <p className="muted">
-          Every search reads these companies' career pages. Companies found along the way are added here too. Add a company
-          by its name, or paste the link of its careers page (Greenhouse, Lever, Ashby, or the company's own site).
+          Every search reads these companies' careers pages. Companies found along the way are added here too.
         </p>
-        <form className="actions" onSubmit={addCompany}>
-          <input
-            aria-label="Company name or career page link"
-            placeholder="Company name or careers page link"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-          />
-          <button type="submit" className="btn" disabled={adding}>
-            {adding ? 'Looking…' : 'Add company'}
-          </button>
+
+        <form className="column" onSubmit={addCompany} aria-label="Add one company">
+          <h3>Add one company</h3>
+          <div className="grid-2">
+            <div className="field">
+              <label htmlFor="company-name">Company name</label>
+              <input
+                id="company-name"
+                placeholder="e.g. Amazon"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="company-link">Careers page link (optional)</label>
+              <input
+                id="company-link"
+                placeholder="https://..."
+                value={companyLink}
+                onChange={(e) => setCompanyLink(e.target.value)}
+              />
+            </div>
+          </div>
+          <small className="muted">
+            With only a name, the app looks for the company's careers page on Greenhouse, Lever and Ashby. With a link, paste
+            it as it is: the long advertising part is dropped for you. Links of Greenhouse, Lever, Ashby, Amazon (amazon.jobs)
+            and company sites that list their jobs are supported.
+          </small>
+          <div className="actions">
+            <button type="submit" className="btn btn-primary" disabled={adding}>
+              {adding ? 'Adding…' : 'Add company'}
+            </button>
+          </div>
         </form>
+        <ErrorMessage message={companyError} />
+        {companyNotice && <p role="status">{companyNotice}</p>}
+
         <div className="field">
-          <label htmlFor="import-names">Company names to import</label>
+          <label htmlFor="import-names">Add many companies at once</label>
           <textarea
             id="import-names"
+            aria-label="Company names to import"
             rows={3}
             value={names}
-            placeholder="One company per line, or separated by commas"
+            placeholder="One company name per line, or separated by commas"
             onChange={(e) => setNames(e.target.value)}
           />
           <small className="muted">
@@ -321,7 +369,15 @@ export function SearchPage() {
           {(companies.data ?? []).map((c) => (
             <li key={c.id} className="row-between">
               <span>
-                <strong>{c.name}</strong> <span className="muted">{c.board}</span>
+                <strong>{c.name}</strong> <span className="muted">{BOARD_LABELS[c.board] ?? c.board}</span>
+                {c.link && (
+                  <>
+                    {' · '}
+                    <a href={c.link} target="_blank" rel="noopener noreferrer">
+                      Careers page
+                    </a>
+                  </>
+                )}
               </span>
               <ConfirmButton label="Remove" confirmLabel="Confirm remove" onConfirm={() => removeCompany(c.id)} />
             </li>
