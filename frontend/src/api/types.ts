@@ -118,6 +118,26 @@ export interface JobInput {
   notes?: string
 }
 
+export interface SearchSettings {
+  titles: string[]
+  excludedTitles: string[]
+  locations: string[]
+  minMatchPercent: number
+  daily: boolean
+  lastRunAt: string | null
+  lastRunSummary: string | null
+  running: boolean
+}
+
+export type SearchSettingsInput = Omit<SearchSettings, 'lastRunAt' | 'lastRunSummary' | 'running'>
+
+export interface SearchedCompany {
+  id: number
+  name: string
+  board: string
+  slug: string
+}
+
 export interface MatchResult {
   coveragePercent: number
   matchedTerms: string[]

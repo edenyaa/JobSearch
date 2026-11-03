@@ -12,6 +12,9 @@ import type {
   JobStatus,
   LoginResponse,
   MatchResult,
+  SearchedCompany,
+  SearchSettings,
+  SearchSettingsInput,
   Skill,
   SkillInput,
   TailorResult,
@@ -75,4 +78,15 @@ export const jobsApi = {
   tailor: (userId: number, id: number) => request<TailorResult>('POST', `/users/${userId}/jobs/${id}/tailor`),
   uploadResume: (userId: number, id: number, file: File) => upload<Job>(`/users/${userId}/jobs/${id}/resume`, file),
   downloadResume: (userId: number, id: number) => download(`/users/${userId}/jobs/${id}/resume`, 'tailored-cv'),
+}
+
+export const searchApi = {
+  get: (userId: number) => request<SearchSettings>('GET', `/users/${userId}/search`),
+  update: (userId: number, input: SearchSettingsInput) =>
+    request<SearchSettings>('PUT', `/users/${userId}/search`, input),
+  run: (userId: number) => request<SearchSettings>('POST', `/users/${userId}/search/run`),
+  companies: (userId: number) => request<SearchedCompany[]>('GET', `/users/${userId}/search/companies`),
+  addCompany: (userId: number, company: string) =>
+    request<SearchedCompany>('POST', `/users/${userId}/search/companies`, { company }),
+  removeCompany: (userId: number, id: number) => request<void>('DELETE', `/users/${userId}/search/companies/${id}`),
 }

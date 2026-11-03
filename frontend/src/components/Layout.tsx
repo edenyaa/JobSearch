@@ -8,6 +8,7 @@ import type { IconName } from './Icon'
 export const NAV_LINKS: { to: string; label: string; icon: IconName }[] = [
   { to: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
   { to: '/jobs', label: 'Jobs', icon: 'jobs' },
+  { to: '/search', label: 'Job search', icon: 'search' },
   { to: '/skills', label: 'Skills', icon: 'skills' },
   { to: '/companies', label: 'Companies', icon: 'companies' },
   { to: '/courses', label: 'Courses', icon: 'courses' },

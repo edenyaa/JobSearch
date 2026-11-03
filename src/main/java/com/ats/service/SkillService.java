@@ -1,6 +1,7 @@
 package com.ats.service;
 
 import com.ats.domain.Course;
+import com.ats.domain.KeywordMatcher;
 import com.ats.domain.Skill;
 import com.ats.domain.SkillSource;
 import com.ats.dto.SkillDtos.SkillRequest;
@@ -44,6 +45,12 @@ public class SkillService {
 	@Transactional(readOnly = true)
 	public List<Skill> list(Long userId) {
 		return skills.findByUserId(userId);
+	}
+
+	/** Every skill name and keyword of the user: the terms a job description is matched against. */
+	@Transactional(readOnly = true)
+	public List<String> matchTerms(Long userId) {
+		return KeywordMatcher.termsOf(list(userId));
 	}
 
 	@Transactional(readOnly = true)

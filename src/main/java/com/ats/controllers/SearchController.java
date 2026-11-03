@@ -1,0 +1,62 @@
+package com.ats.controllers;
+
+import com.ats.dto.SearchDtos.SettingsRequest;
+import com.ats.dto.SearchDtos.SettingsResponse;
+import com.ats.dto.SearchDtos.WatchRequest;
+import com.ats.dto.SearchDtos.WatchedResponse;
+import com.ats.service.JobSearchService;
+import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/users/{userId}/search")
+public class SearchController {
+
+	private final JobSearchService search;
+
+	public SearchController(JobSearchService search) {
+		this.search = search;
+	}
+
+	@GetMapping
+	public SettingsResponse get(@PathVariable Long userId) {
+		return respond(userId);
+	}
+
+	@PutMapping
+	public SettingsResponse update(@PathVariable Long userId, @RequestBody SettingsRequest req) {
+		search.update(userId, req);
+		return respond(userId);
+	}
+
+	@PostMapping("/run")
+	@ResponseStatus(HttpStatus.ACCEPTED)
+	public SettingsResponse run(@PathVariable Long userId) {
+		search.startRun(userId);
+		return respond(userId);
+	}
+
+	@GetMapping("/companies")
+	public List<WatchedResponse> companies(@PathVariable Long userId) {
+		return search.watched(userId).stream().map(WatchedResponse::from).toList();
+	}
+
+	@PostMapping("/companies")
+	@ResponseStatus(HttpStatus.CREATED)
+	public WatchedResponse watch(@PathVariable Long userId, @Valid @RequestBody WatchRequest req) {
+		return WatchedResponse.from(search.watch(userId, req.company()));
+	}
+
+	@DeleteMapping("/companies/{id}")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void unwatch(@PathVariable Long userId, @PathVariable Long id) {
+		search.unwatch(userId, id);
+	}
+
+	private SettingsResponse respond(Long userId) {
+		return SettingsResponse.from(search.settings(userId), search.isRunning(userId));
+	}
+
+}

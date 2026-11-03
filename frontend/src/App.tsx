@@ -14,6 +14,7 @@ import { LoginPage } from './pages/LoginPage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { RegisterPage } from './pages/RegisterPage'
+import { SearchPage } from './pages/SearchPage'
 import { SkillsPage } from './pages/SkillsPage'
 
 export const ROUTER_FUTURE = { v7_startTransition: true, v7_relativeSplatPath: true } as const
@@ -37,6 +38,7 @@ export function AppRoutes() {
           <Route path="/jobs/:jobId" element={<JobDetailPage />} />
           <Route path="/jobs/:jobId/edit" element={<JobFormPage />} />
           <Route path="/jobs/:jobId/analysis" element={<AnalysisPage />} />
+          <Route path="/search" element={<SearchPage />} />
           <Route path="/skills" element={<SkillsPage />} />
           <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/courses" element={<CoursesPage />} />
