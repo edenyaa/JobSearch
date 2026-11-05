@@ -156,11 +156,15 @@ public class JobBoards {
 
 	/** Openings from JSearch, which gathers listings of LinkedIn, Glassdoor, Indeed and others. Needs an API key. */
 	public Fetched jsearch(String apiKey, String query, String countryCode) {
-		String url = "https://jsearch.p.rapidapi.com/search?num_pages=1&page=1&query="
-				+ URLEncoder.encode(query, StandardCharsets.UTF_8)
+		String key = apiKey.strip();
+		// keys of OpenWeb Ninja (the makers of JSearch) start with "ak_" and use their own address; the others are RapidAPI keys
+		boolean direct = key.startsWith("ak_");
+		String url = (direct ? "https://api.openwebninja.com/jsearch/search" : "https://jsearch.p.rapidapi.com/search")
+				+ "?num_pages=1&page=1&query=" + URLEncoder.encode(query, StandardCharsets.UTF_8)
 				+ (countryCode.isBlank() ? "" : "&country=" + countryCode);
-		HttpRequest request = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(40))
-				.header("X-RapidAPI-Key", apiKey).header("X-RapidAPI-Host", "jsearch.p.rapidapi.com").GET().build();
+		HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(40));
+		HttpRequest request = (direct ? builder.header("X-API-Key", key)
+				: builder.header("X-RapidAPI-Key", key).header("X-RapidAPI-Host", "jsearch.p.rapidapi.com")).GET().build();
 		List<Posting> found = new ArrayList<>();
 		try {
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
@@ -169,7 +173,7 @@ public class JobBoards {
 					case 401, 403 -> " (the key was refused: check it, and that you subscribed to the JSearch plan)";
 					case 429 -> " (the monthly or hourly quota is used up)";
 					default -> "";
-				});
+				} + bodyHint(response.body()));
 			}
 			for (JsonNode j : mapper.readTree(response.body()).path("data")) {
 				String place = jsearchPlace(j.path("job_city").asString(""), j.path("job_state").asString(""),
@@ -186,6 +190,15 @@ public class JobBoards {
 			Thread.currentThread().interrupt();
 			return new Fetched(found, "JSearch was interrupted");
 		}
+	}
+
+	/** The start of an error reply, so the run summary says what JSearch complained about. */
+	private static String bodyHint(String body) {
+		if (body == null || body.isBlank()) {
+			return "";
+		}
+		String text = body.strip().replaceAll("\\s+", " ");
+		return ": " + (text.length() > 200 ? text.substring(0, 200) + "..." : text);
 	}
 
 	/**
