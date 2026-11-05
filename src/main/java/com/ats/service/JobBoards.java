@@ -154,8 +154,27 @@ public class JobBoards {
 	public record Fetched(List<Posting> postings, String error) {
 	}
 
-	/** Openings from JSearch, which gathers listings of LinkedIn, Glassdoor, Indeed and others. Needs an API key. */
+	/**
+	 * Openings from JSearch, which gathers listings of LinkedIn, Glassdoor, Indeed and others. Needs an API key. When the
+	 * country filter finds nothing it asks once more without it (the place is in the query anyway), and an empty answer
+	 * is reported together with the start of the reply, so the run summary shows what JSearch said.
+	 */
 	public Fetched jsearch(String apiKey, String query, String countryCode) {
+		Fetched first = jsearchOnce(apiKey, query, countryCode);
+		if (first.error() != null || !first.postings().isEmpty()) {
+			return first;
+		}
+		Fetched second = countryCode.isBlank() ? first : jsearchOnce(apiKey, query, "");
+		if (second.error() != null || !second.postings().isEmpty()) {
+			return second;
+		}
+		return new Fetched(second.postings(), "JSearch found no openings for \"" + query + "\", even without the country"
+				+ " filter. Its reply began" + bodyHint(lastJsearchBody));
+	}
+
+	private volatile String lastJsearchBody = "";
+
+	private Fetched jsearchOnce(String apiKey, String query, String countryCode) {
 		String key = apiKey.strip();
 		// keys of OpenWeb Ninja (the makers of JSearch) start with "ak_" and use their own address; the others are RapidAPI keys
 		boolean direct = key.startsWith("ak_");
@@ -168,6 +187,7 @@ public class JobBoards {
 		List<Posting> found = new ArrayList<>();
 		try {
 			HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+			lastJsearchBody = response.body();
 			if (response.statusCode() != 200) {
 				return new Fetched(found, "JSearch answered HTTP " + response.statusCode() + switch (response.statusCode()) {
 					case 401, 403 -> " (the key was refused: check it, and that you subscribed to the JSearch plan)";

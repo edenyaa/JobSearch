@@ -61,7 +61,6 @@ public class JobSearchService {
 	private static final Pattern GREENHOUSE_URL = Pattern
 			.compile("greenhouse\\.io/(?:embed/job_board\\?for=)?([A-Za-z0-9_-]+)");
 	private static final Pattern ASHBY_URL = Pattern.compile("jobs\\.ashbyhq\\.com/([A-Za-z0-9_.-]+)");
-	private static final Duration AGGREGATOR_MIN_GAP = Duration.ofHours(6);
 	/** The address column holds 2000 characters. */
 	private static final int MAX_ADDRESS = 2000;
 	private static final Pattern LEVER_URL = Pattern.compile("jobs\\.lever\\.co/([A-Za-z0-9_-]+)");
@@ -80,6 +79,7 @@ public class JobSearchService {
 	private final FitJudge judge;
 	private final String jsearchKey;
 	private final int jsearchQueries;
+	private final Duration aggregatorGap;
 	private volatile Instant lastAggregatorCall = Instant.EPOCH;
 	private int aggregatorTurn;
 	private final Set<Long> running = ConcurrentHashMap.newKeySet();
@@ -95,10 +95,12 @@ public class JobSearchService {
 			JobBoards boards, JobService jobs, CompanyService companies, SkillService skills, UserService users,
 			FitJudge judge,
 			@Value("${search.jsearch.api-key:}") String jsearchKey,
-			@Value("${search.jsearch.max-queries:1}") int jsearchQueries) {
+			@Value("${search.jsearch.max-queries:4}") int jsearchQueries,
+			@Value("${search.jsearch.min-gap-hours:12}") int jsearchGapHours) {
 		this.judge = judge;
 		this.jsearchKey = jsearchKey;
 		this.jsearchQueries = jsearchQueries;
+		this.aggregatorGap = Duration.ofHours(Math.max(0, jsearchGapHours));
 		this.settingsRepo = settingsRepo;
 		this.watchedRepo = watchedRepo;
 		this.boards = boards;
@@ -715,15 +717,16 @@ public class JobSearchService {
 	}
 
 	/**
-	 * LinkedIn, Glassdoor and Indeed listings through JSearch; skipped without a key and at most every 6 hours.
-	 * Each call asks for the next of the user's titles, so the titles take turns.
+	 * LinkedIn, Glassdoor and Indeed listings through JSearch; skipped without a key and at most once per the
+	 * configured gap. Each call sends a few of the queries made from the user's titles, so over several searches
+	 * every title is covered. The place filter then keeps only the places the user wants.
 	 */
 	private List<Posting> aggregatorOpenings(SearchSettings s, List<String> problems) {
 		if (!aggregatorEnabled()) {
 			return List.of();
 		}
-		if (Instant.now().isBefore(lastAggregatorCall.plus(AGGREGATOR_MIN_GAP))) {
-			problems.add("JSearch was asked less than 6 hours ago, so it was skipped this time");
+		if (Instant.now().isBefore(lastAggregatorCall.plus(aggregatorGap))) {
+			problems.add("JSearch was asked less than " + aggregatorGap.toHours() + " hours ago, so it was skipped this time");
 			return List.of();
 		}
 		boolean israel = s.getLocations().stream()
@@ -731,10 +734,11 @@ public class JobSearchService {
 		String place = israel ? "israel" : s.getLocations().stream()
 				.filter(l -> !List.of("remote", "worldwide", "anywhere", "emea").contains(l.toLowerCase(Locale.ROOT)))
 				.findFirst().orElse("");
+		List<String> roles = jsearchRoles(s.getTitles());
 		List<Posting> found = new ArrayList<>();
-		for (int i = 0; i < jsearchQueries && !s.getTitles().isEmpty(); i++) {
-			String title = s.getTitles().get(Math.floorMod(aggregatorTurn++, s.getTitles().size()));
-			String query = title + " jobs" + (place.isBlank() ? "" : " in " + place);
+		for (int i = 0; i < jsearchQueries && !roles.isEmpty(); i++) {
+			String query = roles.get(Math.floorMod(aggregatorTurn++, roles.size())) + " jobs"
+					+ (place.isBlank() ? "" : " in " + place);
 			JobBoards.Fetched fetched = boards.jsearch(jsearchKey, query, israel ? "il" : "");
 			found.addAll(fetched.postings());
 			if (fetched.error() != null) {
@@ -745,6 +749,32 @@ public class JobSearchService {
 		}
 		lastAggregatorCall = Instant.now();
 		return found;
+	}
+
+	/**
+	 * Job-board searches made from the user's title words: a bare word such as "ai" or "intern" finds little, so it
+	 * becomes a role ("AI engineer", "intern software developer"). Repeats are dropped.
+	 */
+	public static List<String> jsearchRoles(List<String> titles) {
+		Set<String> roles = new LinkedHashSet<>();
+		for (String title : titles) {
+			String t = title.strip().toLowerCase(Locale.ROOT);
+			switch (t) {
+				case "qa" -> roles.add("QA engineer");
+				case "automation" -> roles.add("QA automation engineer");
+				case "ai" -> roles.add("AI engineer");
+				case "llm" -> roles.add("LLM engineer");
+				case "prompt" -> roles.add("prompt engineer");
+				case "machine learning" -> roles.add("machine learning engineer");
+				case "developer" -> roles.add("software developer");
+				case "backend" -> roles.add("backend developer");
+				case "full stack" -> roles.add("full stack developer");
+				case "junior", "student", "intern", "trainee", "graduate", "entry level" -> roles.add(t + " software developer");
+				default -> roles.add(title.strip());
+			}
+		}
+		roles.remove("");
+		return new ArrayList<>(roles);
 	}
 
 	public boolean aggregatorEnabled() {
