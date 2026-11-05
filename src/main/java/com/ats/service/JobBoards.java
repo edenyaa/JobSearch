@@ -172,8 +172,9 @@ public class JobBoards {
 				});
 			}
 			for (JsonNode j : mapper.readTree(response.body()).path("data")) {
-				String place = j.path("job_city").asString("") + ", " + countryName(j.path("job_country").asString(""))
-						+ (j.path("job_is_remote").asBoolean(false) ? " Remote" : "");
+				String place = jsearchPlace(j.path("job_city").asString(""), j.path("job_state").asString(""),
+						j.path("job_location").asString(""), j.path("job_country").asString(""),
+						j.path("job_is_remote").asBoolean(false));
 				found.add(new Posting("jsearch", j.path("job_id").asString(""), j.path("job_title").asString(""),
 						j.path("employer_name").asString(""), place, j.path("job_apply_link").asString(""),
 						j.path("job_description").asString("")));
@@ -185,6 +186,25 @@ public class JobBoards {
 			Thread.currentThread().interrupt();
 			return new Fetched(found, "JSearch was interrupted");
 		}
+	}
+
+	/**
+	 * The place text of a JSearch listing. The city is often empty and then the state or the free-text location
+	 * ("Tel Aviv-Yafo, Israel") is the only clue, so all of them are kept for the place filter.
+	 */
+	public static String jsearchPlace(String city, String state, String location, String country, boolean remote) {
+		List<String> parts = new ArrayList<>();
+		for (String part : new String[] { city, state, location }) {
+			if (part != null && !part.isBlank() && parts.stream()
+					.noneMatch(p -> p.toLowerCase(Locale.ROOT).contains(part.strip().toLowerCase(Locale.ROOT)))) {
+				parts.add(part.strip());
+			}
+		}
+		String countryText = countryName(country == null ? "" : country);
+		if (!countryText.isBlank()) {
+			parts.add(countryText);
+		}
+		return String.join(", ", parts) + (remote ? " Remote" : "");
 	}
 
 	/** "IL" becomes "Israel", so that a place filter written in words recognises it. */

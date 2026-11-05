@@ -323,6 +323,52 @@ describe('JobsPage', () => {
     expect(screen.getByRole('combobox', { name: 'Status of Backend Engineer' })).toHaveValue('SAVED')
   })
 
+  test('GivenStudentAndJuniorJobs_WhenChoosingTabs_ThenEachTabListsItsOwnJobsWithCounts', async () => {
+    mockApi({
+      'GET /api/users/1/jobs': {
+        body: [
+          makeJob({ id: 1, title: 'QA Intern', description: 'x' }),
+          makeJob({ id: 2, title: 'Junior Developer', description: 'x' }),
+          makeJob({ id: 3, title: 'Graduate Backend', description: 'x' }),
+          makeJob({ id: 4, title: 'Platform Engineer', description: '5 years of Go' }),
+        ],
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+    await screen.findByRole('link', { name: 'QA Intern' })
+
+    expect(screen.getByRole('tab', { name: /All jobs \(4\)/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /Student & intern \(1\)/ })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Junior & graduate \(2\)/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /Student & intern/ }))
+    expect(screen.getByRole('link', { name: 'QA Intern' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Junior Developer' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /Junior & graduate/ }))
+    expect(screen.getByRole('link', { name: 'Junior Developer' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Graduate Backend' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'QA Intern' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('tab', { name: /Other/ }))
+    expect(screen.getByRole('link', { name: 'Platform Engineer' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Junior Developer' })).not.toBeInTheDocument()
+  })
+
+  test('GivenLevelInTheAddress_WhenOpening_ThenThatTabIsSelected', async () => {
+    mockApi({
+      'GET /api/users/1/jobs': {
+        body: [makeJob({ id: 1, title: 'QA Intern' }), makeJob({ id: 2, title: 'Junior Developer' })],
+      },
+    })
+    renderApp('/jobs?level=junior')
+
+    expect(await screen.findByRole('link', { name: 'Junior Developer' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'QA Intern' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Junior & graduate/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
   test('GivenServerError_WhenClickingRetry_ThenJobsAreRequestedAgain', async () => {
     const api = mockApi({ 'GET /api/users/1/jobs': { status: 500, body: { message: 'Database is down' } } })
     const user = userEvent.setup()

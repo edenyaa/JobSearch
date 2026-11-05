@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { messageOf } from '../api/client'
 import { jobsApi } from '../api/endpoints'
 import { JOB_STATUSES, STATUS_LABELS } from '../api/types'
@@ -8,9 +8,19 @@ import { useUserId } from '../auth/AuthContext'
 import { ErrorMessage, ErrorState, Loading } from '../components/ErrorMessage'
 import { Icon } from '../components/Icon'
 import { useLoad } from '../hooks/useLoad'
+import { levelOf } from './jobLevel'
+import type { JobLevel } from './jobLevel'
 
 type SortKey = 'fit' | 'newest' | 'oldest' | 'title'
 type View = 'cards' | 'table'
+type Tab = 'all' | JobLevel
+
+const TABS: { id: Tab; label: string }[] = [
+  { id: 'all', label: 'All jobs' },
+  { id: 'student', label: 'Student & intern' },
+  { id: 'junior', label: 'Junior & graduate' },
+  { id: 'other', label: 'Other' },
+]
 
 function sortJobs(jobs: Job[], sort: SortKey): Job[] {
   const copy = [...jobs]
@@ -80,7 +90,19 @@ export function JobsPage() {
   const [savingId, setSavingId] = useState<number | null>(null)
   const [statusError, setStatusError] = useState<string | null>(null)
   const shown = useMemo(() => (jobs.data ?? []).map((j) => changed[j.id] ?? j), [jobs.data, changed])
-  const sorted = useMemo(() => sortJobs(shown, sort), [shown, sort])
+  const [params, setParams] = useSearchParams()
+  const tab: Tab = TABS.some((t) => t.id === params.get('level')) ? (params.get('level') as Tab) : 'all'
+  const counts = useMemo(() => {
+    const result: Record<Tab, number> = { all: shown.length, student: 0, junior: 0, other: 0 }
+    shown.forEach((j) => {
+      result[levelOf(j)]++
+    })
+    return result
+  }, [shown])
+  const sorted = useMemo(
+    () => sortJobs(tab === 'all' ? shown : shown.filter((j) => levelOf(j) === tab), sort),
+    [shown, sort, tab],
+  )
 
   async function changeStatus(job: Job, next: JobStatus) {
     if (next === job.status) return
@@ -107,6 +129,21 @@ export function JobsPage() {
         <Link to="/jobs/new" className="btn btn-primary">
           <Icon name="plus" size={16} /> Add job
         </Link>
+      </div>
+
+      <div className="tabs" role="tablist" aria-label="Kind of job">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.id}
+            className={`tab ${tab === t.id ? 'tab-active' : ''}`}
+            onClick={() => setParams(t.id === 'all' ? {} : { level: t.id })}
+          >
+            {t.label} {jobs.loading ? '' : <span className="muted">({counts[t.id]})</span>}
+          </button>
+        ))}
       </div>
 
       <div className="toolbar">
