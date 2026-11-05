@@ -642,6 +642,19 @@ a:focus-visible {
   color: var(--bad);
 }
 
+/* a badge that is also a dropdown, to change a job's status from the list */
+.status-select {
+  width: auto;
+  min-width: 7.5rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.status-select:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
 .badge-cv {
   margin-left: 0.5rem;
   background: var(--primary-soft);

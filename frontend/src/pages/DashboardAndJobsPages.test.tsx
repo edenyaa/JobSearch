@@ -205,7 +205,7 @@ describe('JobsPage', () => {
 
     const row = (await screen.findByRole('link', { name: 'Backend Engineer' })).closest('li')!
 
-    expect(within(row).getByText('Interview')).toBeInTheDocument()
+    expect(within(row).getByRole('combobox', { name: 'Status of Backend Engineer' })).toHaveValue('INTERVIEW')
   })
 
   test('GivenJobs_WhenSortingByTitle_ThenOrderFollowsTheTitles', async () => {
@@ -273,9 +273,54 @@ describe('JobsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Table view' }))
 
     const row = screen.getByRole('link', { name: 'Backend Engineer' }).closest('tr')!
-    expect(within(row).getByText('Offer')).toBeInTheDocument()
+    expect(within(row).getByRole('combobox', { name: 'Status of Backend Engineer' })).toHaveValue('OFFER')
     expect(within(row).getByRole('link', { name: 'Analysis for Backend Engineer' })).toHaveAttribute('href', '/jobs/5/analysis')
     expect(screen.getByRole('button', { name: 'Table view' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  test('GivenSavedJob_WhenChoosingAnotherStatusInTheList_ThenItIsSavedAndShownWithoutOpeningTheJob', async () => {
+    const api = mockApi({
+      'GET /api/users/1/jobs': { body: [makeJob({ id: 5, status: 'SAVED' })] },
+      'PUT /api/users/1/jobs/5/status': (call) => ({ body: makeJob({ id: 5, status: (call.body as { status: never }).status }) }),
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+    const select = await screen.findByRole('combobox', { name: 'Status of Backend Engineer' })
+
+    await user.selectOptions(select, 'Applied')
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Status of Backend Engineer' })).toHaveValue('APPLIED'))
+    expect(api.to('PUT /api/users/1/jobs/5/status')[0].body).toEqual({ status: 'APPLIED' })
+  })
+
+  test('GivenTableView_WhenChangingStatus_ThenItIsSavedFromTheRow', async () => {
+    const api = mockApi({
+      'GET /api/users/1/jobs': { body: [makeJob({ id: 5, status: 'SAVED' })] },
+      'PUT /api/users/1/jobs/5/status': { body: makeJob({ id: 5, status: 'REJECTED' }) },
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+    await screen.findByRole('link', { name: 'Backend Engineer' })
+    await user.click(screen.getByRole('button', { name: 'Table view' }))
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Status of Backend Engineer' }), 'Rejected')
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Status of Backend Engineer' })).toHaveValue('REJECTED'))
+    expect(api.to('PUT /api/users/1/jobs/5/status')).toHaveLength(1)
+  })
+
+  test('GivenServerError_WhenChangingStatusInTheList_ThenErrorIsShownAndStatusStays', async () => {
+    mockApi({
+      'GET /api/users/1/jobs': { body: [makeJob({ id: 5, status: 'SAVED' })] },
+      'PUT /api/users/1/jobs/5/status': { status: 500, body: { message: 'boom' } },
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs')
+
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Status of Backend Engineer' }), 'Offer')
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not change the status of Backend Engineer')
+    expect(screen.getByRole('combobox', { name: 'Status of Backend Engineer' })).toHaveValue('SAVED')
   })
 
   test('GivenServerError_WhenClickingRetry_ThenJobsAreRequestedAgain', async () => {

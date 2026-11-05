@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { messageOf } from '../api/client'
 import { jobsApi } from '../api/endpoints'
 import { JOB_STATUSES, STATUS_LABELS } from '../api/types'
 import type { Job, JobStatus } from '../api/types'
 import { useUserId } from '../auth/AuthContext'
-import { ErrorState, Loading } from '../components/ErrorMessage'
+import { ErrorMessage, ErrorState, Loading } from '../components/ErrorMessage'
 import { Icon } from '../components/Icon'
-import { StatusBadge } from '../components/StatusBadge'
 import { useLoad } from '../hooks/useLoad'
 
 type SortKey = 'fit' | 'newest' | 'oldest' | 'title'
@@ -51,13 +51,50 @@ function FitTags({ job }: { job: Job }) {
   )
 }
 
+function StatusSelect({ job, busy, onChange }: { job: Job; busy: boolean; onChange: (status: JobStatus) => void }) {
+  return (
+    <select
+      className={`badge status-select badge-${job.status.toLowerCase()}`}
+      aria-label={`Status of ${titleOf(job)}`}
+      value={job.status}
+      disabled={busy}
+      onChange={(e) => onChange(e.target.value as JobStatus)}
+    >
+      {JOB_STATUSES.map((s) => (
+        <option key={s} value={s}>
+          {STATUS_LABELS[s]}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export function JobsPage() {
   const userId = useUserId()
   const [status, setStatus] = useState<JobStatus | ''>('')
   const [sort, setSort] = useState<SortKey>('fit')
   const [view, setView] = useState<View>('cards')
   const jobs = useLoad(() => jobsApi.list(userId, status || undefined), [userId, status])
-  const sorted = useMemo(() => sortJobs(jobs.data ?? [], sort), [jobs.data, sort])
+  // jobs whose status was just changed here, so the list updates without a reload
+  const [changed, setChanged] = useState<Record<number, Job>>({})
+  const [savingId, setSavingId] = useState<number | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
+  const shown = useMemo(() => (jobs.data ?? []).map((j) => changed[j.id] ?? j), [jobs.data, changed])
+  const sorted = useMemo(() => sortJobs(shown, sort), [shown, sort])
+
+  async function changeStatus(job: Job, next: JobStatus) {
+    if (next === job.status) return
+    setStatusError(null)
+    setSavingId(job.id)
+    try {
+      const saved = await jobsApi.changeStatus(userId, job.id, next)
+      setChanged((previous) => ({ ...previous, [job.id]: saved }))
+    } catch (e) {
+      setStatusError(`Could not change the status of ${titleOf(job)}: ${messageOf(e)}`)
+    } finally {
+      setSavingId(null)
+    }
+  }
   const count = sorted.length
 
   return (
@@ -108,6 +145,7 @@ export function JobsPage() {
         </div>
       </div>
 
+      <ErrorMessage message={statusError} />
       {jobs.loading && <Loading />}
       <ErrorState title="We could not load your jobs" message={jobs.error} onRetry={jobs.reload} />
       {!jobs.loading && !jobs.error && count === 0 && <p className="muted empty-note">No jobs found.</p>}
@@ -123,7 +161,7 @@ export function JobsPage() {
                   </Link>
                   <div className="muted">{metaOf(job)}</div>
                 </div>
-                <StatusBadge status={job.status} />
+                <StatusSelect job={job} busy={savingId === job.id} onChange={(next) => void changeStatus(job, next)} />
               </div>
               <div className="job-card-foot">
                 <div className="tags">
@@ -166,7 +204,7 @@ export function JobsPage() {
                   </td>
                   <td className="muted">{metaOf(job)}</td>
                   <td>
-                    <StatusBadge status={job.status} />
+                    <StatusSelect job={job} busy={savingId === job.id} onChange={(next) => void changeStatus(job, next)} />
                   </td>
                   <td>
                     <FitTags job={job} />
