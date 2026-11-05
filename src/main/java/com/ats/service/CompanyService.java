@@ -3,6 +3,7 @@ package com.ats.service;
 import com.ats.domain.Company;
 import com.ats.domain.ContactPerson;
 import com.ats.domain.Job;
+import com.ats.domain.PostingFilter;
 import com.ats.dto.CompanyDtos.CompanyRequest;
 import com.ats.dto.CompanyDtos.ContactBody;
 import com.ats.repository.CompanyRepository;
@@ -74,8 +75,52 @@ public class CompanyService {
 				.toList();
 	}
 
+	/**
+	 * Makes sure a company with this name exists. A careers link is stored when the company has none, or always
+	 * when {@code overwrite} is set (the user typed it).
+	 */
+	public Company ensure(Long userId, String name, String careersUrl, boolean overwrite) {
+		String trimmed = name.trim();
+		Company c = companies.findByUserIdAndNameIgnoreCase(userId, trimmed).orElse(null);
+		if (c == null) {
+			c = new Company();
+			c.setUser(users.get(userId));
+			c.setName(trimmed);
+			c.setCareersUrl(careersUrl);
+			return companies.save(c);
+		}
+		if (careersUrl != null && (overwrite || c.getCareersUrl() == null || c.getCareersUrl().isBlank())) {
+			c.setCareersUrl(careersUrl);
+			return companies.save(c);
+		}
+		return c;
+	}
+
+	/** Stops the company being linked to a careers page; the company itself stays. */
+	public void clearCareersUrl(Long userId, Long id) {
+		Company c = get(userId, id);
+		c.setCareersUrl(null);
+		companies.save(c);
+	}
+
+	/** A pasted careers link: advertising parameters dropped, http(s) only, empty means none. */
+	static String cleanLink(String link) {
+		if (link == null || link.isBlank()) {
+			return null;
+		}
+		String cleaned = PostingFilter.cleanUrl(link.strip());
+		if (!cleaned.matches("(?i)https?://\\S+")) {
+			throw new ValidationException("The careers page link must start with http:// or https://");
+		}
+		if (cleaned.length() > 2000) {
+			throw new ValidationException("That link is too long even without its tracking parameters.");
+		}
+		return cleaned;
+	}
+
 	private void apply(Company c, String name, CompanyRequest req) {
 		c.setName(name);
+		c.setCareersUrl(cleanLink(req.careersUrl()));
 		c.setContacts(req.contacts() == null ? new ArrayList<>()
 				: req.contacts().stream().map(this::toContact).filter(Objects::nonNull)
 						.collect(Collectors.toCollection(ArrayList::new)));

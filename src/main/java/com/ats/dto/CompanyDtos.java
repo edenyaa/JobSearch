@@ -25,7 +25,8 @@ public final class CompanyDtos {
 		}
 	}
 
-	public record CompanyRequest(@NotBlank String name, List<ContactBody> contacts) {
+	/** {@code careersUrl} is optional; with a link, the job search reads that careers page. */
+	public record CompanyRequest(@NotBlank String name, List<ContactBody> contacts, String careersUrl) {
 	}
 
 	/** A job submitted to the company, in short form. */
@@ -36,11 +37,13 @@ public final class CompanyDtos {
 		}
 	}
 
-	public record CompanyResponse(Long id, String name, List<ContactBody> contacts, List<CompanyJob> jobs) {
+	/** {@code searched} says whether the job search reads this company's careers page. */
+	public record CompanyResponse(Long id, String name, String careersUrl, boolean searched, List<ContactBody> contacts,
+			List<CompanyJob> jobs) {
 
-		public static CompanyResponse from(Company c, List<Job> jobs) {
-			return new CompanyResponse(c.getId(), c.getName(), c.getContacts().stream().map(ContactBody::from).toList(),
-					jobs.stream().map(CompanyJob::from).toList());
+		public static CompanyResponse from(Company c, List<Job> jobs, boolean searched) {
+			return new CompanyResponse(c.getId(), c.getName(), c.getCareersUrl(), searched,
+					c.getContacts().stream().map(ContactBody::from).toList(), jobs.stream().map(CompanyJob::from).toList());
 		}
 	}
 

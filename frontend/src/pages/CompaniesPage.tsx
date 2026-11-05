@@ -17,6 +17,7 @@ export function CompaniesPage() {
   const companies = useLoad(() => companiesApi.list(userId), [userId])
   const [editingId, setEditingId] = useState<number | null>(null)
   const [name, setName] = useState('')
+  const [careersUrl, setCareersUrl] = useState('')
   const [contacts, setContacts] = useState<ContactInput[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -26,6 +27,7 @@ export function CompaniesPage() {
   function reset() {
     setEditingId(null)
     setName('')
+    setCareersUrl('')
     setContacts([])
     setError(null)
   }
@@ -33,6 +35,7 @@ export function CompaniesPage() {
   function edit(company: Company) {
     setEditingId(company.id)
     setName(company.name)
+    setCareersUrl(company.careersUrl ?? '')
     setContacts(
       company.contacts.map((c) => ({
         name: c.name ?? '',
@@ -71,6 +74,7 @@ export function CompaniesPage() {
     try {
       const input = {
         name: name.trim(),
+        careersUrl: careersUrl.trim(),
         contacts: contacts.map((c) => ({
           name: c.name.trim(),
           whereKnown: c.whereKnown.trim(),
@@ -115,6 +119,19 @@ export function CompaniesPage() {
         <div className="field">
           <label htmlFor="company-name">Company name</label>
           <input id="company-name" ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="company-careers">Careers page link (optional)</label>
+          <input
+            id="company-careers"
+            placeholder="https://..."
+            value={careersUrl}
+            onChange={(e) => setCareersUrl(e.target.value)}
+          />
+          <small className="muted">
+            With a link, the job search reads this company's open jobs. Paste it as it is: the long advertising part is
+            dropped for you.
+          </small>
         </div>
         <fieldset className="field">
           <legend>People you know here</legend>
@@ -198,7 +215,20 @@ export function CompaniesPage() {
         {(companies.data ?? []).map((company) => (
           <li key={company.id} className="card list-item column">
             <div className="row-between">
-              <strong>{company.name}</strong>
+              <span>
+                <strong>{company.name}</strong>
+                {company.careersUrl && (
+                  <>
+                    {' · '}
+                    <a href={company.careersUrl} target="_blank" rel="noopener noreferrer">
+                      Careers page
+                    </a>
+                    <span className="muted">
+                      {company.searched ? ' · searched for jobs' : ' · no jobs could be read from this page'}
+                    </span>
+                  </>
+                )}
+              </span>
               <div className="actions">
                 <button type="button" className="btn" aria-label={`Edit ${company.name}`} onClick={() => edit(company)}>
                   Edit

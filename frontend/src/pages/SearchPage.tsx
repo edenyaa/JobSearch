@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { messageOf } from '../api/client'
 import { searchApi } from '../api/endpoints'
-import type { SearchSettingsInput } from '../api/types'
+import type { SearchSettingsInput, SearchedCompany } from '../api/types'
 import { useUserId } from '../auth/AuthContext'
 import { ConfirmButton } from '../components/ConfirmButton'
 import { ErrorMessage, Loading } from '../components/ErrorMessage'
@@ -167,6 +167,14 @@ export function SearchPage() {
     if (list.length > 0) void importNames(list)
   }
 
+  function addLinkFor(c: SearchedCompany) {
+    setCompanyName(c.name)
+    setCompanyLink(c.link ?? '')
+    setCompanyError(null)
+    setCompanyNotice(null)
+    document.getElementById('company-link')?.focus()
+  }
+
   async function removeCompany(id: number) {
     try {
       await searchApi.removeCompany(userId, id)
@@ -300,7 +308,7 @@ export function SearchPage() {
       <div className="card column">
         <h2>Companies searched</h2>
         <p className="muted">
-          Every search reads these companies' careers pages. Companies found along the way are added here too.
+          These are the same companies as on your Companies page. Every search reads the careers page of each company that has a link. Companies without a link are listed too: add a link whenever you find one.
         </p>
 
         <form className="column" onSubmit={addCompany} aria-label="Add one company">
@@ -369,7 +377,10 @@ export function SearchPage() {
           {(companies.data ?? []).map((c) => (
             <li key={c.id} className="row-between">
               <span>
-                <strong>{c.name}</strong> <span className="muted">{BOARD_LABELS[c.board] ?? c.board}</span>
+                <strong>{c.name}</strong>{' '}
+                <span className="muted">
+                  {c.board ? (BOARD_LABELS[c.board] ?? c.board) : c.link ? 'No jobs could be read from its page' : 'No careers page'}
+                </span>
                 {c.link && (
                   <>
                     {' · '}
@@ -379,7 +390,20 @@ export function SearchPage() {
                   </>
                 )}
               </span>
-              <ConfirmButton label="Remove" confirmLabel="Confirm remove" onConfirm={() => removeCompany(c.id)} />
+              <span className="actions">
+                {!c.board && (
+                  <button type="button" className="btn" aria-label={`Add careers page link for ${c.name}`} onClick={() => addLinkFor(c)}>
+                    {c.link ? 'Change link' : 'Add link'}
+                  </button>
+                )}
+                {(c.board || c.link) && (
+                  <ConfirmButton
+                    label="Remove"
+                    confirmLabel="Confirm remove"
+                    onConfirm={() => removeCompany(c.id)}
+                  />
+                )}
+              </span>
             </li>
           ))}
         </ul>

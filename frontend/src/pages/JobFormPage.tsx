@@ -61,6 +61,7 @@ export function JobFormPage() {
   const [busy, setBusy] = useState(false)
   const [companies, setCompanies] = useState<string[]>([])
   const [addingCompany, setAddingCompany] = useState(false)
+  const [companyLink, setCompanyLink] = useState('')
 
   useEffect(() => {
     let active = true
@@ -121,7 +122,7 @@ export function JobFormPage() {
     try {
       const company = form.company.trim()
       if (company !== '' && !companies.some((name) => name.toLowerCase() === company.toLowerCase())) {
-        await companiesApi.create(userId, { name: company, contacts: [] })
+        await companiesApi.create(userId, { name: company, careersUrl: companyLink.trim(), contacts: [] })
       }
       const input = toJobInput(form)
       const saved = editing ? await jobsApi.update(userId, Number(jobId), input) : await jobsApi.create(userId, input)
@@ -163,14 +164,24 @@ export function JobFormPage() {
               <option value={NEW_COMPANY}>+ Add new company…</option>
             </select>
             {addingCompany && (
-              <input
-                aria-label="New company name"
-                placeholder="Company name"
-                value={form.company}
-                onChange={(e) => set('company', e.target.value)}
-              />
+              <>
+                <input
+                  aria-label="New company name"
+                  placeholder="Company name"
+                  value={form.company}
+                  onChange={(e) => set('company', e.target.value)}
+                />
+                <input
+                  aria-label="Careers page link (optional)"
+                  placeholder="Careers page link (optional)"
+                  value={companyLink}
+                  onChange={(e) => setCompanyLink(e.target.value)}
+                />
+              </>
             )}
-            <small className="muted">New companies are added to your Companies page.</small>
+            <small className="muted">
+              New companies are added to your Companies page and the job search. A careers page link is optional.
+            </small>
           </div>
           <div className="field">
             <label htmlFor="jobNumber">Job number</label>

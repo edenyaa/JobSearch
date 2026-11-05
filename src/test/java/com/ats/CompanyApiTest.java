@@ -4,9 +4,17 @@ import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+import com.ats.service.JobBoards;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 class CompanyApiTest extends ApiTestSupport {
+
+    @MockitoBean
+    JobBoards boards;
 
     private String companies(Account account) {
         return "/api/users/" + account.id() + "/companies";
@@ -122,9 +130,83 @@ class CompanyApiTest extends ApiTestSupport {
         createCompany(other, "{\"name\":\"Zeta\"}");
 
         mvc.perform(get(companies(account)).header("Authorization", account.bearer()))
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].name").value("Alpha"))
-                .andExpect(jsonPath("$[1].name").value("Beta"));
+                .andExpect(jsonPath("$[*].name", hasItems("Alpha", "Beta")))
+                .andExpect(jsonPath("$[*].name", not(hasItem("Zeta"))))
+                .andExpect(jsonPath("$[0].name").value("Alpha"));
+    }
+
+    @Test
+    public void GivenCareersLinkWithTracking_WhenCreating_ThenItIsStoredCleanedAndSearched() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(true);
+
+        mvc.perform(json(post(companies(account)), account,
+                "{\"name\":\"Acme\",\"careersUrl\":\"https://acme.test/careers?team=qa&gclid=abc#top\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.careersUrl").value("https://acme.test/careers?team=qa"))
+                .andExpect(jsonPath("$.searched").value(true));
+
+        mvc.perform(get("/api/users/" + account.id() + "/search/companies").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].link").value("https://acme.test/careers?team=qa"))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].board").value("page"));
+    }
+
+    @Test
+    public void GivenCompanyWithoutLink_WhenCreating_ThenItIsNotSearchedAndLinkCanBeAddedLater() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(true);
+        long id = createCompany(account, "{\"name\":\"Acme\"}");
+
+        mvc.perform(get(companies(account) + "/" + id).header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$.careersUrl").doesNotExist())
+                .andExpect(jsonPath("$.searched").value(false));
+
+        mvc.perform(json(put(companies(account) + "/" + id), account,
+                "{\"name\":\"Acme\",\"careersUrl\":\"https://jobs.lever.co/acme\"}"))
+                .andExpect(jsonPath("$.searched").value(true));
+        mvc.perform(json(put(companies(account) + "/" + id), account, "{\"name\":\"Acme\"}"))
+                .andExpect(jsonPath("$.searched").value(false));
+    }
+
+    @Test
+    public void GivenLinkThatCannotBeOpened_WhenSaving_ThenCompanyAndLinkAreKeptButNotSearched() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(false);
+
+        mvc.perform(json(post(companies(account)), account,
+                "{\"name\":\"Acme\",\"careersUrl\":\"https://acme.test/jobs\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.careersUrl").value("https://acme.test/jobs"))
+                .andExpect(jsonPath("$.searched").value(false));
+    }
+
+    @Test
+    public void GivenLinkThatIsNotWeb_WhenSaving_ThenRejected() throws Exception {
+        Account account = newAccount();
+
+        mvc.perform(json(post(companies(account)), account, "{\"name\":\"Acme\",\"careersUrl\":\"ftp://x\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    public void GivenSearchedCompanyAddedOnSearchPage_WhenListingCompanies_ThenItShowsWithItsLink() throws Exception {
+        Account account = newAccount();
+        when(boards.exists(any())).thenReturn(true);
+        mvc.perform(json(post("/api/users/" + account.id() + "/search/companies"), account,
+                "{\"name\":\"Acme\",\"link\":\"https://jobs.lever.co/acme\"}")).andExpect(status().isCreated());
+
+        mvc.perform(get(companies(account)).header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].careersUrl").value("https://jobs.lever.co/acme"))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].searched").value(true));
+    }
+
+    @Test
+    public void GivenStarterCompanies_WhenOpeningCompaniesPage_ThenTheyAreListedWithTheirCareersPage() throws Exception {
+        Account account = newAccount();
+
+        mvc.perform(get(companies(account)).header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[?(@.name=='Similarweb')].careersUrl").value("https://boards.greenhouse.io/similarweb"))
+                .andExpect(jsonPath("$[?(@.name=='Similarweb')].searched").value(true));
     }
 
     @Test

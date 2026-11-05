@@ -75,8 +75,32 @@ describe('JobFormPage create', () => {
     await user.click(screen.getByRole('button', { name: 'Save job' }))
 
     await screen.findByRole('heading', { name: 'Backend Engineer' })
-    expect(api.to('POST /api/users/1/companies')[0].body).toEqual({ name: 'Globex', contacts: [] })
+    expect(api.to('POST /api/users/1/companies')[0].body).toEqual({ name: 'Globex', careersUrl: '', contacts: [] })
     expect(api.to('POST /api/users/1/jobs')[0].body).toMatchObject({ company: 'Globex' })
+  })
+
+  test('GivenNewCompanyWithCareersLink_WhenSaving_ThenLinkIsSentWithTheCompany', async () => {
+    const api = mockApi({
+      'GET /api/users/1/companies': { body: [] },
+      'POST /api/users/1/companies': { status: 201, body: makeCompany({ name: 'Globex' }) },
+      'POST /api/users/1/jobs': { status: 201, body: makeJob({ id: 9 }) },
+      'GET /api/users/1/jobs/9': { body: makeJob({ id: 9 }) },
+    })
+    const user = userEvent.setup()
+    renderApp('/jobs/new')
+
+    await user.selectOptions(screen.getByLabelText('Company'), '+ Add new company…')
+    await user.type(screen.getByLabelText('New company name'), 'Globex')
+    await user.type(screen.getByLabelText('Careers page link (optional)'), 'https://globex.test/careers')
+    await user.type(screen.getByLabelText('Job description'), 'Build things')
+    await user.click(screen.getByRole('button', { name: 'Save job' }))
+
+    await screen.findByRole('heading', { name: 'Backend Engineer' })
+    expect(api.to('POST /api/users/1/companies')[0].body).toEqual({
+      name: 'Globex',
+      careersUrl: 'https://globex.test/careers',
+      contacts: [],
+    })
   })
 
   test('GivenBlankDescription_WhenSaving_ThenErrorIsShownAndNothingIsSent', async () => {

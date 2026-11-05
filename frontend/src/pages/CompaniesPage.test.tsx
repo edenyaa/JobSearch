@@ -107,11 +107,40 @@ describe('CompaniesPage', () => {
     const post = api.calls.find((call) => call.method === 'POST')!
     expect(post.body).toEqual({
       name: 'Globex',
+      careersUrl: '',
       contacts: [
         { name: 'Lee', whereKnown: 'Army', linkedin: '', phone: '052', description: 'Served together' },
         { name: 'Noa', whereKnown: '', linkedin: '', phone: '', description: '' },
       ],
     })
+  })
+
+  test('GivenCareersLink_WhenAdding_ThenItIsSentWithTheCompany', async () => {
+    const api = statefulCompanies()
+    const user = userEvent.setup()
+    renderApp('/companies')
+    await screen.findByText('No companies yet.')
+
+    await user.type(screen.getByLabelText('Company name'), 'Globex')
+    await user.type(screen.getByLabelText('Careers page link (optional)'), 'https://globex.test/careers')
+    await user.click(screen.getByRole('button', { name: 'Add company' }))
+
+    await screen.findByText('Globex')
+    const post = api.calls.find((call) => call.method === 'POST')!
+    expect(post.body).toMatchObject({ name: 'Globex', careersUrl: 'https://globex.test/careers' })
+  })
+
+  test('GivenCompanyWithCareersLink_WhenOpeningAndEditing_ThenLinkIsShownAndPrefilled', async () => {
+    statefulCompanies([makeCompany({ careersUrl: 'https://acme.test/jobs', searched: true })])
+    const user = userEvent.setup()
+    renderApp('/companies')
+
+    const link = await screen.findByRole('link', { name: 'Careers page' })
+    expect(link).toHaveAttribute('href', 'https://acme.test/jobs')
+    expect(screen.getByText(/searched for jobs/)).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Edit Acme' }))
+    expect(screen.getByLabelText('Careers page link (optional)')).toHaveValue('https://acme.test/jobs')
   })
 
   test('GivenBlankName_WhenAdding_ThenErrorIsShownAndNothingSent', async () => {

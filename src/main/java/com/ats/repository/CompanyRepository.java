@@ -11,6 +11,8 @@ public interface CompanyRepository extends JpaRepository<Company, Long> {
 
 	Optional<Company> findByIdAndUserId(Long id, Long userId);
 
+	Optional<Company> findByUserIdAndNameIgnoreCase(Long userId, String name);
+
 	boolean existsByUserIdAndNameIgnoreCase(Long userId, String name);
 
 	boolean existsByUserIdAndNameIgnoreCaseAndIdNot(Long userId, String name, Long id);

@@ -117,6 +117,8 @@ export function makeCompany(overrides: Partial<Company> = {}): Company {
   return {
     id: 1,
     name: 'Acme',
+    careersUrl: null,
+    searched: false,
     contacts: [],
     jobs: [],
     ...overrides,

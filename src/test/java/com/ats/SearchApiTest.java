@@ -269,7 +269,11 @@ class SearchApiTest extends ApiTestSupport {
         mvc.perform(delete(base(account) + "/companies/" + idOf(created)).header("Authorization", account.bearer()))
                 .andExpect(status().isNoContent());
         mvc.perform(get(base(account) + "/companies").header("Authorization", account.bearer()))
-                .andExpect(jsonPath("$[*].slug", not(hasItem("acme"))));
+                .andExpect(jsonPath("$[*].slug", not(hasItem("acme"))))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].board").value(org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.nullValue())));
+        mvc.perform(get("/api/users/" + account.id() + "/companies").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].searched").value(false))
+                .andExpect(jsonPath("$[?(@.name=='Acme')].careersUrl").value(org.hamcrest.Matchers.hasItem(org.hamcrest.Matchers.nullValue())));
     }
 
     @Test
@@ -333,7 +337,7 @@ class SearchApiTest extends ApiTestSupport {
         when(boards.remotive(anyString())).thenReturn(List.of(
                 new Posting("remotive", "1", "Junior Java Developer", "Alpha", "Tel Aviv, Israel", "https://x.test/1", text),
                 new Posting("remotive", "2", "Java Developer", "Beta", "Rehovot, Israel", "https://x.test/2", text),
-                new Posting("remotive", "3", "Java Developer", "Weak", "Haifa, Israel", "https://x.test/3", text)));
+                new Posting("remotive", "3", "Java Developer", "Weak", "Netanya, Israel", "https://x.test/3", text)));
         when(boards.arbeitnow()).thenReturn(List.of());
         when(boards.openings(any(), anyString())).thenReturn(List.of());
         when(boards.findBoard(anyString())).thenReturn(Optional.empty());
@@ -357,6 +361,31 @@ class SearchApiTest extends ApiTestSupport {
                 .andExpect(jsonPath("$[?(@.company=='Weak')]", hasSize(0)));
         mvc.perform(get(base(account)).header("Authorization", account.bearer()))
                 .andExpect(jsonPath("$.lastRunSummary", containsString("1 dropped as a weak fit")));
+    }
+
+    @Test
+    public void GivenJobsNorthAndSouthOfTheRange_WhenRunning_ThenOnlyHaderaToBeerShevaIsSaved() throws Exception {
+        Account account = newAccount();
+        uploadCv(account, "Java developer with Spring experience");
+        createSkill(account, "Java");
+        String text = "<p>We need a Java developer with strong Java skills for our team of engineers.</p>";
+        when(boards.remotive(anyString())).thenReturn(List.of(
+                new Posting("remotive", "1", "Java Developer", "Hadera Co", "Hadera, Israel", "https://x.test/1", text),
+                new Posting("remotive", "2", "Java Developer", "South Co", "Beer Sheva, Israel", "https://x.test/2", text),
+                new Posting("remotive", "3", "Java Developer", "Inland Co", "Jerusalem, Israel", "https://x.test/3", text),
+                new Posting("remotive", "4", "Java Developer", "North Co", "Haifa, Israel", "https://x.test/4", text),
+                new Posting("remotive", "5", "Java Developer", "Far South Co", "Eilat, Israel", "https://x.test/5", text),
+                new Posting("remotive", "6", "Java Developer", "Nowhere Co", "Israel", "https://x.test/6", text)));
+        when(boards.arbeitnow()).thenReturn(List.of());
+        when(boards.openings(any(), anyString())).thenReturn(List.of());
+        when(boards.findBoard(anyString())).thenReturn(Optional.empty());
+        when(judge.judge(anyString(), any(), anyString(), any())).thenReturn(Optional.of(new Fit(80, "Fits")));
+
+        mvc.perform(post(base(account) + "/run").header("Authorization", account.bearer()));
+        waitUntilFinished(account);
+
+        mvc.perform(get("/api/users/" + account.id() + "/jobs").header("Authorization", account.bearer()))
+                .andExpect(jsonPath("$[*].company", containsInAnyOrder("Hadera Co", "South Co", "Inland Co")));
     }
 
     @Test

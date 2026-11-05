@@ -280,4 +280,27 @@ describe('SearchPage', () => {
     await waitFor(() => expect(screen.queryByText('Jfrog')).not.toBeInTheDocument())
     expect(api.to('DELETE /api/users/1/search/companies/1')).toHaveLength(1)
   })
+
+  test('GivenCompaniesWithoutPage_WhenOpening_ThenTheyAreListedAndAddLinkFillsTheForm', async () => {
+    mockApi({
+      'GET /api/users/1/search': { body: settings() },
+      'GET /api/users/1/search/companies': {
+        body: [
+          { id: 5, name: 'Globex', board: null, slug: null, link: null, openings: null },
+          { id: 6, name: 'Initech', board: null, slug: null, link: 'https://initech.test/jobs', openings: null },
+        ] as SearchedCompany[],
+      },
+    })
+    const user = userEvent.setup()
+    renderApp('/search')
+
+    expect(await screen.findByText('Globex')).toBeInTheDocument()
+    expect(screen.getByText('No careers page')).toBeInTheDocument()
+    expect(screen.getByText('No jobs could be read from its page')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(1)
+
+    await user.click(screen.getByRole('button', { name: 'Add careers page link for Globex' }))
+    expect(screen.getByLabelText('Company name')).toHaveValue('Globex')
+    expect(screen.getByLabelText('Careers page link (optional)')).toHaveFocus()
+  })
 })

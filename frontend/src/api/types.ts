@@ -76,6 +76,8 @@ export interface CompanyJob {
 export interface Company {
   id: number
   name: string
+  careersUrl: string | null
+  searched: boolean
   contacts: ContactPerson[]
   jobs: CompanyJob[]
 }
@@ -90,6 +92,7 @@ export interface ContactInput {
 
 export interface CompanyInput {
   name: string
+  careersUrl?: string
   contacts: ContactInput[]
 }
 
@@ -144,8 +147,9 @@ export type SearchSettingsInput = Omit<SearchSettings, 'lastRunAt' | 'lastRunSum
 export interface SearchedCompany {
   id: number
   name: string
-  board: string
-  slug: string
+  /** Empty when the company has no careers page that is searched. */
+  board: string | null
+  slug: string | null
   link: string | null
   openings: number | null
 }

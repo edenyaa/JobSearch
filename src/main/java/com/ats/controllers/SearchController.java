@@ -48,14 +48,20 @@ public class SearchController {
 
 	@GetMapping("/companies")
 	public List<WatchedResponse> companies(@PathVariable Long userId) {
-		return search.watched(userId).stream().map(w -> WatchedResponse.from(w, null)).toList();
+		// the same companies as the Companies page; id is the company's, board is empty when no page is searched
+		return search.searchCompanies(userId).stream()
+				.map(sc -> new WatchedResponse(sc.company().getId(), sc.company().getName(),
+						sc.watched() == null ? null : sc.watched().getBoard(),
+						sc.watched() == null ? null : sc.watched().getSlug(), sc.company().getCareersUrl(), null))
+				.toList();
 	}
 
 	@PostMapping("/companies")
 	@ResponseStatus(HttpStatus.CREATED)
 	public WatchedResponse watch(@PathVariable Long userId, @Valid @RequestBody WatchRequest req) {
 		JobSearchService.Watched added = search.watch(userId, req.company(), req.name(), req.link());
-		return WatchedResponse.from(added.company(), added.openings());
+		return new WatchedResponse(added.row().getId(), added.row().getName(), added.company().getBoard(),
+				added.company().getSlug(), added.row().getCareersUrl(), added.openings());
 	}
 
 	/** Looks up many companies' career pages in the background; no names means the built-in Israeli list. */

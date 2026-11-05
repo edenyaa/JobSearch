@@ -8,7 +8,7 @@ import com.ats.domain.Posting;
 import com.ats.domain.PostingFilter;
 import com.ats.domain.SearchSettings;
 import com.ats.domain.WatchedCompany;
-import com.ats.dto.CompanyDtos.CompanyRequest;
+import com.ats.domain.Company;
 import com.ats.dto.JobDtos.JobRequest;
 import com.ats.dto.SearchDtos.SettingsRequest;
 import com.ats.repository.SearchSettingsRepository;
@@ -22,6 +22,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -134,6 +135,18 @@ public class JobSearchService {
 		return s;
 	}
 
+	/**
+	 * Places from Hadera in the north to Beer Sheva in the south, coast to inland. Cities north of Hadera (Haifa,
+	 * Yokneam) and south of Beer Sheva are left out, and so is the bare word "israel", which would accept all of them.
+	 */
+	static final List<String> DEFAULT_PLACES = List.of("hadera", "caesarea", "binyamina", "pardes hanna", "or akiva",
+			"netanya", "kfar yona", "tel mond", "even yehuda", "kadima", "raanana", "ra'anana", "kfar saba", "hod hasharon",
+			"herzliya", "tel aviv", "ramat gan", "givatayim", "bnei brak", "petah tikva", "petach tikva", "rosh haayin",
+			"rosh ha'ayin", "kiryat ono", "or yehuda", "yehud", "airport city", "holon", "bat yam", "rishon", "rehovot",
+			"rechovot", "ness ziona", "nes ziona", "gedera", "yavne", "ramla", "modiin", "modi'in", "beit shemesh",
+			"jerusalem", "ashdod", "ashkelon", "kiryat gat", "sderot", "netivot", "ofakim", "beer sheva", "be'er sheva",
+			"beersheba", "beer-sheva");
+
 	/** QA, development, AI backend and prompting roles, junior, student or intern level, in Israel with Rehovot first. */
 	private static void applyRecommended(SearchSettings s) {
 		s.setTitles(new ArrayList<>(List.of("qa", "automation", "developer", "software engineer", "backend", "ai",
@@ -141,10 +154,7 @@ public class JobSearchService {
 				"full stack")));
 		s.setExcludedTitles(new ArrayList<>(
 				List.of("senior", "staff", "principal", "lead", "manager", "director", "head of", "vp", "architect")));
-		s.setLocations(new ArrayList<>(List.of("israel", "rehovot", "rechovot", "tel aviv", "ramat gan", "herzliya",
-				"petah tikva", "petach tikva", "holon", "rishon", "ness ziona", "nes ziona", "modiin", "jerusalem", "haifa",
-				"netanya", "raanana", "ra'anana", "kfar saba", "hod hasharon", "yokneam", "beer sheva", "be'er sheva",
-				"givatayim", "bnei brak", "lod", "ramla", "yavne", "ashdod")));
+		s.setLocations(new ArrayList<>(DEFAULT_PLACES));
 		s.setPriorityLocations(new ArrayList<>(List.of("rehovot", "rechovot")));
 		s.setMinMatchPercent(20);
 		s.setMinFitPercent(40);
@@ -191,7 +201,7 @@ public class JobSearchService {
 	}
 
 	/** A company added to the search, and how many openings were read from its page when it was added. */
-	public record Watched(WatchedCompany company, int openings) {
+	public record Watched(WatchedCompany company, int openings, Company row) {
 	}
 
 	/**
@@ -203,31 +213,12 @@ public class JobSearchService {
 		if (text.isEmpty()) {
 			throw new ValidationException("Enter the company name, or the link of its careers page.");
 		}
+		Found found = linkBoard(text);
 		Board board;
 		String derived;
-		Matcher greenhouse = GREENHOUSE_URL.matcher(text);
-		Matcher lever = LEVER_URL.matcher(text);
-		Matcher ashby = ASHBY_URL.matcher(text);
-		boolean isLink = text.matches("(?i)https?://\\S+");
-		if (greenhouse.find()) {
-			board = new Board(JobBoards.GREENHOUSE, greenhouse.group(1));
-			derived = capitalize(board.slug());
-		} else if (lever.find()) {
-			board = new Board(JobBoards.LEVER, lever.group(1));
-			derived = capitalize(board.slug());
-		} else if (ashby.find()) {
-			board = new Board(JobBoards.ASHBY, ashby.group(1));
-			derived = capitalize(board.slug());
-		} else if (isLink && hostOf(text).matches("(?i)(www\\.)?amazon\\.jobs")) {
-			board = new Board(JobBoards.AMAZON, amazonCountry(text));
-			derived = "Amazon";
-		} else if (isLink) {
-			String url = PostingFilter.cleanUrl(text);
-			if (url.length() > MAX_ADDRESS) {
-				throw new ValidationException("That link is too long even without its tracking parameters.");
-			}
-			board = new Board(JobBoards.PAGE, url);
-			derived = capitalize(hostOf(url).replaceFirst("^(www|careers|jobs)\\.", "").split("\\.")[0]);
+		if (found != null) {
+			board = found.board();
+			derived = found.name();
 		} else {
 			board = boards.findBoard(text).orElseThrow(() -> new ValidationException("No Greenhouse, Lever or Ashby "
 					+ "career page found for " + text + ". Paste the link of its careers page as well."));
@@ -240,8 +231,126 @@ public class JobSearchService {
 		settings(userId);
 		WatchedCompany w = addWatched(userId, shown, board);
 		int openings = boards.openings(board, shown).size();
-		addToCompanies(userId, shown);
-		return new Watched(w, openings);
+		boolean typed = link != null && !link.isBlank();
+		String cleaned = typed ? PostingFilter.cleanUrl(text) : null;
+		String url = cleaned != null && cleaned.length() <= MAX_ADDRESS ? cleaned : publicUrl(board);
+		Company row = companies.ensure(userId, shorten(shown), url, typed);
+		return new Watched(w, openings, row);
+	}
+
+	/** A board recognised from a link or board address, with a name guessed from it. */
+	private record Found(Board board, String name) {
+	}
+
+	/** Recognises Greenhouse, Lever, Ashby, Amazon and any other web page; null when the text is a plain name. */
+	private Found linkBoard(String text) {
+		Matcher greenhouse = GREENHOUSE_URL.matcher(text);
+		Matcher lever = LEVER_URL.matcher(text);
+		Matcher ashby = ASHBY_URL.matcher(text);
+		boolean isLink = text.matches("(?i)https?://\\S+");
+		if (greenhouse.find()) {
+			return new Found(new Board(JobBoards.GREENHOUSE, greenhouse.group(1)), capitalize(greenhouse.group(1)));
+		} else if (lever.find()) {
+			return new Found(new Board(JobBoards.LEVER, lever.group(1)), capitalize(lever.group(1)));
+		} else if (ashby.find()) {
+			return new Found(new Board(JobBoards.ASHBY, ashby.group(1)), capitalize(ashby.group(1)));
+		} else if (isLink && hostOf(text).matches("(?i)(www\\.)?amazon\\.jobs")) {
+			return new Found(new Board(JobBoards.AMAZON, amazonCountry(text)), "Amazon");
+		} else if (isLink) {
+			String url = PostingFilter.cleanUrl(text);
+			if (url.length() > MAX_ADDRESS) {
+				throw new ValidationException("That link is too long even without its tracking parameters.");
+			}
+			return new Found(new Board(JobBoards.PAGE, url),
+					capitalize(hostOf(url).replaceFirst("^(www|careers|jobs)\\.", "").split("\\.")[0]));
+		}
+		return null;
+	}
+
+	/** The public careers page of a board, shown as the company's link. */
+	static String publicUrl(Board board) {
+		return switch (board.kind()) {
+			case JobBoards.GREENHOUSE -> "https://boards.greenhouse.io/" + board.slug();
+			case JobBoards.LEVER -> "https://jobs.lever.co/" + board.slug();
+			case JobBoards.ASHBY -> "https://jobs.ashbyhq.com/" + board.slug();
+			case JobBoards.AMAZON -> "https://www.amazon.jobs/en/search?normalized_country_code%5B%5D=" + board.slug();
+			default -> board.slug();
+		};
+	}
+
+	/**
+	 * Brings the search in line with a company's careers link after the user saved the company: the old page is
+	 * dropped, and the new one is searched when it can be read. Returns whether the company is searched now. The link
+	 * stays saved either way.
+	 */
+	public boolean syncCompanyLink(Long userId, String oldName, Company c) {
+		List<WatchedCompany> existing = watchedRepo.findByUserIdOrderByNameAsc(userId).stream()
+				.filter(w -> w.getName().equalsIgnoreCase(oldName) || w.getName().equalsIgnoreCase(c.getName())).toList();
+		String url = c.getCareersUrl();
+		if (url == null || url.isBlank()) {
+			watchedRepo.deleteAll(existing);
+			return false;
+		}
+		settings(userId);
+		Found found = linkBoard(url.strip());
+		boolean page = JobBoards.PAGE.equals(found.board().kind());
+		String slug = page ? fingerprint(found.board().slug()) : found.board().slug();
+		boolean kept = false;
+		for (WatchedCompany w : existing) {
+			if (!kept && w.getBoard().equals(found.board().kind()) && w.getSlug().equals(slug)) {
+				w.setName(c.getName());
+				watchedRepo.save(w);
+				kept = true;
+			} else {
+				watchedRepo.delete(w);
+			}
+		}
+		if (kept) {
+			return true;
+		}
+		if (!boards.exists(found.board())) {
+			return false;
+		}
+		try {
+			addWatched(userId, c.getName(), found.board());
+		} catch (ConflictException e) {
+			// another company already reads this page
+		}
+		return true;
+	}
+
+	/** Lower-case names of the companies whose careers page is searched. */
+	public Set<String> searchedNames(Long userId) {
+		Set<String> names = new HashSet<>();
+		for (WatchedCompany w : watched(userId)) {
+			names.add(w.getName().toLowerCase(Locale.ROOT));
+		}
+		return names;
+	}
+
+	/** One company on the Search page: with {@code board} null when no careers page is searched for it. */
+	public record SearchCompany(Company company, WatchedCompany watched) {
+	}
+
+	/**
+	 * Every company the user has, with the careers page searched for it, if any. Companies that were found by the
+	 * search or imported are first put on the Companies page, so both pages show the same list.
+	 */
+	public List<SearchCompany> searchCompanies(Long userId) {
+		mirrorWatched(userId);
+		Map<String, WatchedCompany> byName = new HashMap<>();
+		for (WatchedCompany w : watchedRepo.findByUserIdOrderByNameAsc(userId)) {
+			byName.putIfAbsent(w.getName().toLowerCase(Locale.ROOT), w);
+		}
+		return companies.list(userId).stream()
+				.map(c -> new SearchCompany(c, byName.get(c.getName().toLowerCase(Locale.ROOT)))).toList();
+	}
+
+	/** Puts every searched company on the Companies page, with its careers link when it has none yet. */
+	public void mirrorWatched(Long userId) {
+		for (WatchedCompany w : watched(userId)) {
+			companies.ensure(userId, shorten(w.getName()), publicUrl(boardOf(w)), false);
+		}
 	}
 
 	/** The board a saved company is read from. */
@@ -303,9 +412,12 @@ public class JobSearchService {
 		}
 	}
 
-	public void unwatch(Long userId, Long id) {
-		watchedRepo.delete(watchedRepo.findByIdAndUserId(id, userId).orElseThrow(
-				() -> new NotFoundException("Searched company", id)));
+	/** Stops searching a company's careers page. The company stays on the Companies page, without the link. */
+	public void unwatch(Long userId, Long companyId) {
+		Company c = companies.get(userId, companyId);
+		watchedRepo.deleteAll(watchedRepo.findByUserIdOrderByNameAsc(userId).stream()
+				.filter(w -> w.getName().equalsIgnoreCase(c.getName())).toList());
+		companies.clearCareersUrl(userId, companyId);
 	}
 
 	private static String capitalize(String slug) {
@@ -614,7 +726,8 @@ public class JobSearchService {
 			problems.add("JSearch was asked less than 6 hours ago, so it was skipped this time");
 			return List.of();
 		}
-		boolean israel = s.getLocations().stream().anyMatch(l -> l.equalsIgnoreCase("israel"));
+		boolean israel = s.getLocations().stream()
+				.anyMatch(l -> l.equalsIgnoreCase("israel") || DEFAULT_PLACES.contains(l.toLowerCase(Locale.ROOT)));
 		String place = israel ? "israel" : s.getLocations().stream()
 				.filter(l -> !List.of("remote", "worldwide", "anywhere", "emea").contains(l.toLowerCase(Locale.ROOT)))
 				.findFirst().orElse("");
@@ -643,11 +756,7 @@ public class JobSearchService {
 	}
 
 	private void addToCompanies(Long userId, String name) {
-		try {
-			companies.create(userId, new CompanyRequest(shorten(name), List.of()));
-		} catch (ConflictException e) {
-			// already on the Companies page
-		}
+		companies.ensure(userId, shorten(name), null, false);
 	}
 
 	private static String shorten(String s) {
