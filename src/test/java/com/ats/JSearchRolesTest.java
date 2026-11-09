@@ -14,7 +14,7 @@ class JSearchRolesTest {
                 "backend", "ai", "machine learning", "llm", "prompt", "junior", "student", "intern", "trainee",
                 "graduate", "entry level", "full stack"));
 
-        assertEquals(List.of("QA engineer", "QA automation engineer", "software developer", "software engineer",
+        assertEquals(List.of("qa", "automation", "software developer", "software engineer",
                 "backend developer", "AI engineer", "machine learning engineer", "LLM engineer", "prompt engineer",
                 "junior software developer", "student software developer", "intern software developer",
                 "trainee software developer", "graduate software developer", "entry level software developer",
@@ -23,6 +23,6 @@ class JSearchRolesTest {
 
     @Test
     public void GivenRepeatedAndBlankTitles_WhenMakingSearches_ThenRepeatsAndBlanksAreDropped() {
-        assertEquals(List.of("QA engineer", "devops"), JobSearchService.jsearchRoles(List.of("qa", "QA", " ", "devops")));
+        assertEquals(List.of("qa", "devops"), JobSearchService.jsearchRoles(List.of("qa", "QA", " ", "devops")));
     }
 }

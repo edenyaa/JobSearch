@@ -760,8 +760,8 @@ public class JobSearchService {
 		for (String title : titles) {
 			String t = title.strip().toLowerCase(Locale.ROOT);
 			switch (t) {
-				case "qa" -> roles.add("QA engineer");
-				case "automation" -> roles.add("QA automation engineer");
+				case "qa" -> roles.add("qa");
+				case "automation" -> roles.add("automation");
 				case "ai" -> roles.add("AI engineer");
 				case "llm" -> roles.add("LLM engineer");
 				case "prompt" -> roles.add("prompt engineer");
