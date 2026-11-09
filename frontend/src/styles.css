@@ -8,10 +8,10 @@
   --muted: #64748b;
   --border: #e2e8f0;
   --track: #e9edf5;
-  --primary: #4338ca;
-  --primary-hover: #3730a3;
+  --primary: #1d4ed8;
+  --primary-hover: #1e40af;
   --primary-focus: #2563eb;
-  --primary-soft: #eef2ff;
+  --primary-soft: #eff4ff;
   --primary-text: #ffffff;
   --danger: #be123c;
   --good: #059669;
@@ -20,17 +20,31 @@
   --bad-bg: #ffe4e6;
   --warn: #b45309;
   --warn-bg: #fef3c7;
-  --notice-bg: #eef2ff;
+  --notice-bg: #eff4ff;
   --st-saved: #94a3b8;
-  --st-applied: #4338ca;
+  --st-applied: #1d4ed8;
   --st-interview: #f59e0b;
   --st-offer: #059669;
   --st-rejected: #e11d48;
-  --st-withdrawn: #8b5cf6;
-  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
+  --st-withdrawn: #0e7490;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --t-fast: 140ms;
+  --t-base: 200ms;
   --shadow-pop: 0 10px 30px -6px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.06);
   --radius: 12px;
   color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+::selection {
+  background: #bfdbfe;
+  color: var(--text);
 }
 
 * {
@@ -50,14 +64,16 @@ a {
 }
 
 h1 {
-  font-size: 1.7rem;
+  font-size: 1.75rem;
   line-height: 1.2;
+  text-wrap: balance;
   margin: 0 0 0.25rem;
   letter-spacing: -0.02em;
 }
 
 h2 {
   font-size: 1.05rem;
+  text-wrap: balance;
   margin: 0 0 0.6rem;
 }
 
@@ -68,6 +84,7 @@ h3 {
 
 p {
   margin: 0 0 0.5rem;
+  text-wrap: pretty;
 }
 
 .muted {
@@ -130,7 +147,7 @@ p {
   width: 30px;
   height: 30px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #4338ca, #2563eb);
+  background: var(--primary);
   color: #fff;
   font-weight: 800;
 }
@@ -162,7 +179,6 @@ p {
   background: var(--primary-soft);
   color: var(--primary);
   font-weight: 600;
-  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .page {
@@ -244,12 +260,22 @@ textarea {
   width: auto;
 }
 
+input,
+select,
+textarea {
+  transition: border-color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+}
+
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--primary-focus);
   outline-offset: 1px;
   background: var(--surface);
+}
+
+::placeholder {
+  color: #6b7a90;
 }
 
 button:focus-visible,
@@ -277,15 +303,17 @@ a:focus-visible {
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
-  transition: background 0.12s, border-color 0.12s, transform 0.05s;
+  transition: background var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), transform 120ms var(--ease-out);
 }
 
-.btn:hover:not(:disabled) {
-  border-color: var(--primary);
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover:not(:disabled) {
+    border-color: var(--primary);
+  }
 }
 
 .btn:active:not(:disabled) {
-  transform: translateY(1px);
+  transform: scale(0.97);
 }
 
 .btn:disabled {
@@ -299,9 +327,11 @@ a:focus-visible {
   color: var(--primary-text);
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--primary-hover);
-  border-color: var(--primary-hover);
+@media (hover: hover) and (pointer: fine) {
+  .btn-primary:hover:not(:disabled) {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
 }
 
 .btn-ghost {
@@ -403,8 +433,16 @@ a:focus-visible {
 
 .stat-number {
   font-size: 2rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table td,
+.coverage-label,
+.chip-count,
+.donut-value {
+  font-variant-numeric: tabular-nums;
 }
 
 .checklist ol {
@@ -445,8 +483,9 @@ a:focus-visible {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4338ca, #2563eb);
+  background: var(--primary);
   border-radius: 999px;
+  transition: width 400ms var(--ease-out);
 }
 
 .charts-row {
@@ -835,7 +874,7 @@ a:focus-visible {
   gap: 1.2rem;
   padding: 3rem;
   color: #fff;
-  background: linear-gradient(145deg, #3730a3, #2563eb);
+  background: #1e3a8a;
 }
 
 .auth-brand .brand {
@@ -923,14 +962,6 @@ a:focus-visible {
   padding: 3rem 0 3.5rem;
 }
 
-.eyebrow {
-  color: var(--primary);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 0.78rem;
-}
-
 .hero h1 {
   font-size: 3rem;
   line-height: 1.08;
@@ -954,7 +985,6 @@ a:focus-visible {
 .preview-card {
   padding: 1.4rem;
   margin: 0;
-  transform: rotate(1.2deg);
 }
 
 .preview-body {
@@ -1110,9 +1140,6 @@ a:focus-visible {
     font-size: 2.2rem;
   }
 
-  .preview-card {
-    transform: none;
-  }
 }
 
 /* ---------- Analysis ---------- */
@@ -1245,7 +1272,7 @@ a:focus-visible {
 }
 
 .brand-mark {
-  box-shadow: 0 4px 10px -2px rgba(67, 56, 202, 0.45);
+  box-shadow: 0 2px 6px -1px rgba(29, 78, 216, 0.35);
 }
 
 .brand-text b {
@@ -1253,7 +1280,7 @@ a:focus-visible {
 }
 
 .sidebar nav a {
-  transition: all 150ms ease;
+  transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 }
 
 .workspace {
@@ -1271,8 +1298,7 @@ a:focus-visible {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.7rem 2rem;
-  background: rgba(250, 249, 245, 0.85);
-  backdrop-filter: blur(8px);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
@@ -1320,7 +1346,7 @@ a:focus-visible {
   font-size: 0.9rem;
   cursor: pointer;
   box-shadow: var(--shadow);
-  transition: all 150ms ease;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
 .search-trigger:hover {
@@ -1350,7 +1376,7 @@ a:focus-visible {
   color: var(--muted);
   cursor: pointer;
   box-shadow: var(--shadow);
-  transition: all 150ms ease;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
 .icon-button:hover {
@@ -1398,7 +1424,7 @@ a:focus-visible {
   text-align: left;
   cursor: pointer;
   box-shadow: var(--shadow);
-  transition: all 150ms ease;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
 .user-card-button:hover {
@@ -1428,7 +1454,7 @@ a:focus-visible {
 }
 
 .avatar {
-  background: linear-gradient(135deg, #4338ca, #2563eb);
+  background: var(--primary);
   color: #fff;
 }
 
@@ -1583,7 +1609,7 @@ a:focus-visible {
   background: none;
   color: var(--muted);
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
 .segmented button[aria-pressed='true'] {
@@ -1604,12 +1630,15 @@ a:focus-visible {
   flex-direction: column;
   gap: 0.9rem;
   padding: 1.1rem 1.2rem;
-  transition: all 150ms ease;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out), box-shadow var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out);
 }
 
-.job-card:hover {
-  border-color: #c7d2fe;
-  box-shadow: 0 6px 18px -8px rgba(67, 56, 202, 0.3);
+@media (hover: hover) and (pointer: fine) {
+  .job-card:hover {
+    transform: translateY(-2px);
+    border-color: #bfd0fb;
+    box-shadow: 0 8px 20px -10px rgba(15, 23, 42, 0.25);
+  }
 }
 
 .job-card-main {
@@ -1661,11 +1690,9 @@ a:focus-visible {
   padding: 0.7rem 1rem;
   background: var(--surface-2);
   color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-size: 0.82rem;
+  font-weight: 500;
   text-align: left;
-  text-transform: uppercase;
 }
 
 .data-table td {
@@ -1673,8 +1700,13 @@ a:focus-visible {
   border-top: 1px solid var(--border);
 }
 
-.data-table tbody tr:hover {
-  background: var(--primary-soft);
+@media (hover: hover) and (pointer: fine) {
+  .data-table tbody tr:hover {
+    background: var(--primary-soft);
+  }
+}
+.data-table tbody tr {
+  transition: background var(--t-fast) var(--ease-out);
 }
 
 .empty-note {
@@ -1741,6 +1773,7 @@ textarea:focus-visible {
 }
 
 .tab {
+  transition: background var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
   padding: 0.45rem 0.9rem;
   border: 1px solid var(--border, #d0d5dd);
   border-radius: 999px;
@@ -1755,4 +1788,99 @@ textarea:focus-visible {
   color: var(--primary);
   border-color: var(--primary);
   font-weight: 700;
+}
+
+/* ---------- Motion: entrances that start from a visible shape, ease-out, origin-aware ---------- */
+
+.popover,
+.menu,
+.palette {
+  transition: opacity var(--t-base) var(--ease-out), transform var(--t-base) var(--ease-out);
+}
+
+.popover {
+  transform-origin: top right;
+}
+
+.menu {
+  transform-origin: bottom center;
+}
+
+.popover,
+.menu,
+.palette {
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+.overlay {
+  transition: opacity var(--t-base) var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+.coverage-fill {
+  transition: width 400ms var(--ease-out);
+}
+
+.btn,
+.icon-button,
+.search-trigger,
+.tab,
+.segmented button,
+.palette li button,
+.menu a,
+.menu button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.icon-button:active,
+.search-trigger:active,
+.tab:active,
+.segmented button:active {
+  transform: scale(0.97);
+}
+
+/* The landing hero enters once on load: a short rise, never on scroll. */
+.hero-text,
+.hero-preview {
+  animation: rise 420ms var(--ease-out) both;
+}
+
+.hero-preview {
+  animation-delay: 80ms;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.cta {
+  background: var(--surface);
+}
+
+.step-number {
+  color: #c3cddd;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+  }
 }

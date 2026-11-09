@@ -50,7 +50,6 @@ export function LandingPage() {
 
       <section className="hero">
         <div className="hero-text">
-          <p className="eyebrow">Applicant tracking, decoded</p>
           <h1>Get your CV past the ATS</h1>
           <p className="lead">
             Upload your CV once. For every job you apply to, see exactly which skills the job wants, which ones your CV is
